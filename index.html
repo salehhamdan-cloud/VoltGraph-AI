@@ -6,17 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="VoltGraph AI - Intelligent Electrical Single-Line Diagram Generator with Safety Analysis">
     <title>VoltGraph AI - Electrical Diagram & Analysis</title>
-
-    <!-- Tailwind CDN (تحذير فقط، لا مشكلة تشغيلية) -->
     <script src="https://cdn.tailwindcss.com"></script>
-
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
-
     <style>
       body {
-        background-color: #0f172a;
-        color: #e2e8f0;
+        background-color: #0f172a; /* Slate 900 */
+        color: #e2e8f0; /* Slate 200 */
       }
+      /* Custom Scrollbar */
       ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -32,29 +29,21 @@
         background: #64748b;
       }
     </style>
-
-    <!-- ممكن تبقي importmap لو تحتاجه فعلاً، لكنه غير ضروري بعد الـ build -->
-
-
-    <!-- أنصح الآن بحذف هذا السطر أو إنشاء ملف index.css فعلاً -->
-    <!-- <link rel="stylesheet" href="/index.css"> -->
-    <script type="importmap">
-    {
-      "imports": {
-        "d3": "https://aistudiocdn.com/d3@^7.9.0",
-        "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-        "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-        "react/": "https://aistudiocdn.com/react@^19.2.0/",
-        "react": "https://aistudiocdn.com/react@^19.2.0",
-        "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-        "vite": "https://aistudiocdn.com/vite@^7.2.4"
-      }
-    }
-    </script>
-    <script type="module" crossorigin src="/VoltGraph-AI/assets/index-BgfcuKaU.js"></script>
-  </head>
+  <script type="importmap">
+{
+  "imports": {
+    "d3": "https://aistudiocdn.com/d3@^7.9.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
+    "vite": "https://aistudiocdn.com/vite@^7.2.4"
+  }
+}
+</script>
+</head>
   <body>
     <div id="root"></div>
-    <!-- هذا المدخل صحيح لـ Vite، لكن يجب ألا يُخدَم خام من GitHub -->
   </body>
 </html>
