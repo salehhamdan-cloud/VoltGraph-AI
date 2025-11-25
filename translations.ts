@@ -7,7 +7,10 @@ export const translations = {
     projects: "Projects",
     pages: "Pages",
     addPage: "Add Page",
-    importProject: "Import Project",
+    importProject: "Import / Restore",
+    backupAll: "Backup All Projects",
+    backupProject: "Save Project File",
+    restoreSuccess: "Successfully restored projects from backup.",
     searchPlaceholder: "Search components...",
     linkComponents: "Link Components",
     linking: "Linking...",
@@ -118,7 +121,8 @@ export const translations = {
       rootMove: "System Root cannot be moved, only connected TO.",
       cycle: "Cannot connect a component to its own child (cycle detected).",
       diagramNotFound: "Diagram not found.",
-      importError: "Failed to import project file. Invalid JSON structure."
+      importError: "Failed to import file. Invalid JSON structure.",
+      restoreSuccess: "Projects restored successfully from backup."
     },
     export: {
       title: "Export Options",
@@ -167,7 +171,10 @@ export const translations = {
     projects: "פרויקטים",
     pages: "עמודים",
     addPage: "הוסף עמוד",
-    importProject: "ייבא פרויקט",
+    importProject: "ייבא / שחזר",
+    backupAll: "גבה את כל הפרויקטים",
+    backupProject: "שמור קובץ פרויקט",
+    restoreSuccess: "הפרויקטים שוחזרו בהצלחה מהגיבוי.",
     searchPlaceholder: "חפש רכיבים...",
     linkComponents: "קשר רכיבים",
     linking: "מקשר...",
@@ -278,7 +285,8 @@ export const translations = {
       rootMove: "לא ניתן להזיז את שורש המערכת, רק להתחבר אליו.",
       cycle: "לא ניתן לחבר רכיב לילד של עצמו (זוהה מעגל סגור).",
       diagramNotFound: "הדיאגרמה לא נמצאה.",
-      importError: "נכשל בייבוא קובץ הפרויקט. מבנה JSON לא תקין."
+      importError: "נכשל בייבוא הקובץ. מבנה JSON לא תקין.",
+      restoreSuccess: "הפרויקטים שוחזרו בהצלחה מהגיבוי."
     },
     export: {
       title: "אפשרויות ייצוא",
@@ -327,7 +335,10 @@ export const translations = {
     projects: "المشاريع",
     pages: "الصفحات",
     addPage: "إضافة صفحة",
-    importProject: "استيراد مشروع",
+    importProject: "استيراد / استعادة",
+    backupAll: "نسخ احتياطي لجميع المشاريع",
+    backupProject: "حفظ ملف المشروع",
+    restoreSuccess: "تم استعادة المشاريع بنجاح من النسخة الاحتياطية.",
     searchPlaceholder: "بحث عن المكونات...",
     linkComponents: "ربط المكونات",
     linking: "جاري الربط...",
@@ -438,7 +449,8 @@ export const translations = {
       rootMove: "لا يمكن نقل جذر النظام، فقط الاتصال به.",
       cycle: "لا يمكن توصيل مكون بتابعه (تم اكتشاف دورة).",
       diagramNotFound: "المخطط غير موجود.",
-      importError: "فشل استيراد ملف المشروع. بنية JSON غير صالحة."
+      importError: "فشل استيراد ملف المشروع. بنية JSON غير صالحة.",
+      restoreSuccess: "تمت استعادة المشاريع بنجاح من النسخة الاحتياطية."
     },
     export: {
       title: "خيارات التصدير",

@@ -719,6 +719,20 @@ function App() {
       document.body.removeChild(downloadLink);
   };
 
+  // NEW: Backup all projects
+  const handleBackupAll = () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projects, null, 2));
+      const date = new Date().toISOString().slice(0, 10);
+      triggerDownload(dataStr, `VoltGraph_FullBackup_${date}.json`);
+  };
+
+  // NEW: Download specific project (Backup Project Folder)
+  const handleDownloadProject = (project: Project) => {
+      const safeName = project.name.trim().replace(/[^\w\u0590-\u05FF\u0600-\u06FF\s-]/g, '_');
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(project, null, 2));
+      triggerDownload(dataStr, `${safeName}_ProjectBackup.json`);
+  };
+
   const handleExport = (format: 'svg' | 'png' | 'json' | 'excel' | 'pdf') => {
       const safeProjectName = activeProject.name.trim().replace(/[^\w\u0590-\u05FF\u0600-\u06FF\s-]/g, '_');
       const safePageName = activePage.name.trim().replace(/[^\w\u0590-\u05FF\u0600-\u06FF\s-]/g, '_');
@@ -859,27 +873,54 @@ function App() {
             const content = e.target?.result as string;
             let importedData = JSON.parse(content);
 
-            // Migration for import
-            if(importedData.pages && importedData.pages[0].rootNode && !importedData.pages[0].items) {
-                 importedData = {
-                     ...importedData,
-                     pages: importedData.pages.map((p: any) => ({
-                         ...p,
-                         items: [p.rootNode],
-                         rootNode: undefined
-                     }))
-                 };
-            }
-
-            if (importedData.id && importedData.pages) {
+            // Case 1: Restore Backup (Array of Projects)
+            if (Array.isArray(importedData)) {
                 saveToHistory();
-                const exists = projects.some(p => p.id === importedData.id);
-                if (exists) importedData = { ...importedData, id: generateId('proj') };
-                setProjects(prev => [...prev, importedData]);
-                setActiveProjectId(importedData.id);
-                setActivePageId(importedData.pages[0].id);
-            } else {
-                alert(t.dialogs.importError);
+                // Migrate if needed
+                const restoredProjects = importedData.map((p: any) => {
+                    if (!p.pages) return null;
+                    const migratedPages = p.pages.map((page: any) => {
+                        if (page.rootNode && !page.items) {
+                            return { ...page, items: [page.rootNode], rootNode: undefined };
+                        }
+                        return page;
+                    });
+                    // Regenerate ID to avoid conflicts, or keep if you prefer overwriting?
+                    // Let's regenerate to be safe and append.
+                    return { ...p, id: generateId('proj'), pages: migratedPages };
+                }).filter(Boolean) as Project[];
+
+                if(restoredProjects.length > 0) {
+                    setProjects(prev => [...prev, ...restoredProjects]);
+                    alert(t.dialogs.restoreSuccess);
+                } else {
+                    alert(t.dialogs.importError);
+                }
+            } 
+            // Case 2: Import Single Project (Object)
+            else {
+                // Migration
+                if(importedData.pages && importedData.pages[0].rootNode && !importedData.pages[0].items) {
+                     importedData = {
+                         ...importedData,
+                         pages: importedData.pages.map((p: any) => ({
+                             ...p,
+                             items: [p.rootNode],
+                             rootNode: undefined
+                         }))
+                     };
+                }
+
+                if (importedData.id && importedData.pages) {
+                    saveToHistory();
+                    const exists = projects.some(p => p.id === importedData.id);
+                    if (exists) importedData = { ...importedData, id: generateId('proj') };
+                    setProjects(prev => [...prev, importedData]);
+                    setActiveProjectId(importedData.id);
+                    setActivePageId(importedData.pages[0].id);
+                } else {
+                    alert(t.dialogs.importError);
+                }
             }
         } catch (error) {
             alert(t.dialogs.importError);
@@ -1127,6 +1168,9 @@ function App() {
                     <h2 className="font-bold text-slate-300 text-sm uppercase tracking-wider">{t.projects}</h2>
                     <div className="flex gap-1">
                          <input type="file" ref={fileInputRef} onChange={handleImportProject} accept=".json" className="hidden" />
+                         <button onClick={handleBackupAll} className="text-slate-400 hover:text-green-400 p-1 hover:bg-slate-800 rounded" title={t.backupAll}>
+                            <span className="material-icons-round text-lg">archive</span>
+                         </button>
                          <button onClick={() => fileInputRef.current?.click()} className="text-slate-400 hover:text-white p-1 hover:bg-slate-800 rounded" title={t.importProject}>
                             <span className="material-icons-round text-lg">upload_file</span>
                         </button>
@@ -1154,6 +1198,7 @@ function App() {
                                     )}
                                 </div>
                                 <div className="flex items-center gap-1">
+                                    {editingId !== project.id && <button onClick={(e) => { e.stopPropagation(); handleDownloadProject(project); }} className="text-slate-600 hover:text-green-400" title={t.backupProject}><span className="material-icons-round text-sm">save_alt</span></button>}
                                     {editingId !== project.id && <button onClick={(e) => { e.stopPropagation(); startEditing(project.id, project.name); }} className="text-slate-600 hover:text-blue-400"><span className="material-icons-round text-sm">edit</span></button>}
                                     {projects.length > 1 && editingId !== project.id && <button onClick={(e) => { e.stopPropagation(); handleDeleteProjectClick(project.id); }} className="text-slate-600 hover:text-red-400"><span className="material-icons-round text-sm">delete</span></button>}
                                 </div>
