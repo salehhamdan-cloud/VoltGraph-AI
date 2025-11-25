@@ -1,0 +1,5 @@
+{
+  "name": "VoltGraph AI",
+  "description": "An intelligent electrical single-line diagram generator. Model electrical systems from transformers to switches, visualize connections, and receive AI-powered safety and compatibility analysis.",
+  "requestFramePermissions": []
+}
