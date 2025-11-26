@@ -6,24 +6,28 @@ import { COMMON_MODELS, COMPONENT_CONFIG, DEFAULT_CONNECTION_STYLE } from '../co
 interface InputPanelProps {
   selectedNode: ElectricalNode | null;
   selectionMode: 'node' | 'link';
+  multiSelectionCount?: number;
   onAdd: (data: NewNodeData) => void;
   onAddIndependent: (type: ComponentType) => void;
   onEdit: (data: NewNodeData) => void;
+  onBulkEdit?: (updates: Partial<NewNodeData>) => void;
   onEditConnection: (style: ConnectionStyle) => void;
   onDelete: () => void;
   onCancel: () => void;
   onDetach?: (nodeId: string) => void;
   onStartConnection?: (nodeId: string) => void;
   onNavigate?: (nodeId: string) => void;
-  t: any; // Translation object
+  t: any;
 }
 
 export const InputPanel: React.FC<InputPanelProps> = ({ 
     selectedNode, 
     selectionMode,
+    multiSelectionCount = 0,
     onAdd, 
     onAddIndependent,
     onEdit, 
+    onBulkEdit,
     onEditConnection,
     onDelete, 
     onCancel,
@@ -89,10 +93,10 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   }, [activeTab, selectedNode]);
 
   useEffect(() => {
-      if (!selectedNode) {
+      if (!selectedNode && multiSelectionCount <= 1) {
           setActiveTab('add');
       }
-  }, [selectedNode]);
+  }, [selectedNode, multiSelectionCount]);
 
   useEffect(() => {
       if (selectedNode && selectionMode === 'link') {
@@ -126,7 +130,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeTab === 'add') {
+    if (multiSelectionCount > 1 && onBulkEdit) {
+        onBulkEdit(formData);
+    } else if (activeTab === 'add') {
         onAdd(formData);
         setFormData(prev => ({ 
             ...prev, 
@@ -147,6 +153,63 @@ export const InputPanel: React.FC<InputPanelProps> = ({
         onEdit(formData);
     }
   };
+
+  // --- Bulk Editing Mode ---
+  if (multiSelectionCount > 1) {
+      return (
+        <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg overflow-hidden sticky top-4">
+            <div className="p-4 border-b border-slate-700 bg-slate-900 flex items-center justify-between">
+                 <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                     <span className="material-icons-round text-blue-400">layers</span>
+                     {t.inputPanel.bulkEdit}
+                 </h3>
+                 <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">
+                     {multiSelectionCount} {t.inputPanel.itemsSelected}
+                 </span>
+            </div>
+            <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="color" 
+                            name="customColor"
+                            value={formData.customColor || '#475569'}
+                            onChange={handleChange}
+                            className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
+                        />
+                        <span className="text-xs text-slate-500">Apply to all</span>
+                    </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.model}</label>
+                  <input
+                    list="models"
+                    name="model"
+                    value={formData.model}
+                    onChange={handleChange}
+                    placeholder="Update Model for all"
+                    className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                  />
+                  <datalist id="models">
+                    {COMMON_MODELS.map(model => (
+                        <option key={model} value={model} />
+                    ))}
+                  </datalist>
+                </div>
+                
+                <div className="pt-2">
+                    <button type="submit" className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-medium text-sm">
+                        {t.inputPanel.applyBulk}
+                    </button>
+                    <button type="button" onClick={onCancel} className="w-full py-2 mt-2 text-slate-400 hover:text-white text-sm">
+                        {t.inputPanel.close}
+                    </button>
+                </div>
+            </form>
+        </div>
+      );
+  }
 
   if (!selectedNode) {
     return (

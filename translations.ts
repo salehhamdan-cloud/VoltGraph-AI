@@ -18,14 +18,15 @@ export const translations = {
     exportSVG: "Export SVG",
     toggleOrientation: "Toggle Orientation",
     toggleTheme: "Toggle Theme",
+    togglePrintMode: "Toggle Print Layout",
     analyze: "Analyze",
     active: "Active",
     propertiesActions: "Properties & Actions",
     quickTips: "Quick Tips",
-    tip1: "Select 'Utility Grid' to add a new main component.",
-    tip2: "Click Link to connect existing components.",
-    tip3: "Manage Projects and Pages in the sidebar.",
-    tip4: "Click a node to Edit or Delete.",
+    tip1: "Shift+Click to select multiple nodes for bulk editing.",
+    tip2: "Ctrl+C / Ctrl+V to copy and paste subtrees.",
+    tip3: "Del / Backspace to delete selected items.",
+    tip4: "Esc to cancel selection or connection mode.",
     resetDiagram: "Reset Diagram to Default",
     saveStatus: { saved: "Saved", saving: "Saving...", unsaved: "Unsaved" },
     undo: "Undo",
@@ -47,7 +48,7 @@ export const translations = {
       target: "Select second component (B) to link."
     },
     legend: {
-      title: "Legend",
+      title: "Component Legend",
       meter: "Attached Meter"
     },
     mode: "Mode",
@@ -64,6 +65,8 @@ export const translations = {
     inputPanel: {
       addConnection: "Add Connection",
       editComponent: "Edit Component",
+      bulkEdit: "Bulk Edit",
+      itemsSelected: "items selected",
       newDownstream: "New Downstream Component",
       editSelected: "Edit Selected Component",
       parent: "Parent",
@@ -82,6 +85,7 @@ export const translations = {
       description: "Description (Optional)",
       addToDiagram: "Add to Diagram",
       saveChanges: "Save Changes",
+      applyBulk: "Apply to All Selected",
       close: "Close",
       deleteComponent: "Delete Component",
       confirmDelete: "Are you sure you want to delete this component and all its children?",
@@ -164,6 +168,12 @@ export const translations = {
       description: "VoltGraph AI is an intelligent Single-Line Diagram (SLD) generator and analyzer designed for electrical engineers. It helps model electrical systems, visualize connections, and provides AI-powered safety analysis.",
       developedBy: "Created by",
       developerName: "Saleh Hamdan"
+    },
+    printLayout: {
+        project: "PROJECT",
+        date: "DATE",
+        engineer: "ENGINEER",
+        rev: "REV"
     }
   },
   he: {
@@ -182,14 +192,15 @@ export const translations = {
     exportSVG: "ייצא SVG",
     toggleOrientation: "שנה כיוון",
     toggleTheme: "שנה ערכת נושא",
+    togglePrintMode: "מצב הדפסה",
     analyze: "נתח",
     active: "פעיל",
     propertiesActions: "מאפיינים ופעולות",
     quickTips: "טיפים מהירים",
-    tip1: "בחר 'רשת חשמל' להוספת רכיב ראשי חדש.",
-    tip2: "לחץ על קשר כדי לחבר רכיבים קיימים.",
-    tip3: "נהל פרויקטים ועמודים בסרגל הצד.",
-    tip4: "לחץ על רכיב לעריכה או מחיקה.",
+    tip1: "Shift+Click לבחירת מספר רכיבים לעריכה קבוצתית.",
+    tip2: "Ctrl+C / Ctrl+V להעתקה והדבקה של ענפים.",
+    tip3: "Del / Backspace למחיקת פריטים נבחרים.",
+    tip4: "Esc לביטול בחירה או יציאה ממצב קישור.",
     resetDiagram: "אפס דיאגרמה לברירת מחדל",
     saveStatus: { saved: "נשמר", saving: "שומר...", unsaved: "לא נשמר" },
     undo: "בטל",
@@ -211,7 +222,7 @@ export const translations = {
       target: "בחר רכיב שני (ב) לחיבור."
     },
     legend: {
-      title: "מקרא",
+      title: "מקרא רכיבים",
       meter: "מונה מחובר"
     },
     mode: "מצב",
@@ -228,6 +239,8 @@ export const translations = {
     inputPanel: {
       addConnection: "הוסף חיבור",
       editComponent: "ערוך רכיב",
+      bulkEdit: "עריכה קבוצתית",
+      itemsSelected: "פריטים נבחרו",
       newDownstream: "רכיב במורד הזרם חדש",
       editSelected: "ערוך רכיב נבחר",
       parent: "הורה",
@@ -246,6 +259,7 @@ export const translations = {
       description: "תיאור (אופציונלי)",
       addToDiagram: "הוסף לדיאגרמה",
       saveChanges: "שמור שינויים",
+      applyBulk: "החל על כל הנבחרים",
       close: "סגור",
       deleteComponent: "מחק רכיב",
       confirmDelete: "האם אתה בטוח שברצונך למחוק רכיב זה ואת כל ילדיו?",
@@ -285,7 +299,7 @@ export const translations = {
       rootMove: "לא ניתן להזיז את שורש המערכת, רק להתחבר אליו.",
       cycle: "לא ניתן לחבר רכיב לילד של עצמו (זוהה מעגל סגור).",
       diagramNotFound: "הדיאגרמה לא נמצאה.",
-      importError: "נכשל בייבוא הקובץ. מבנה JSON לא תקין.",
+      importError: "נכשל בייבוא קובץ הפרויקט. מבנה JSON לא תקין.",
       restoreSuccess: "הפרויקטים שוחזרו בהצלחה מהגיבוי."
     },
     export: {
@@ -328,6 +342,12 @@ export const translations = {
       description: "VoltGraph AI הוא מחולל ומנתח דיאגרמות חד-קוויות (SLD) חכם המיועד למהנדסי חשמל. הוא מסייע במודלים של מערכות חשמל, הדמיית חיבורים ומספק ניתוח בטיחות מבוסס AI.",
       developedBy: "פותח על ידי",
       developerName: "סאלח חמדאן"
+    },
+    printLayout: {
+        project: "פרויקט",
+        date: "תאריך",
+        engineer: "מהנדס",
+        rev: "מהדורה"
     }
   },
   ar: {
@@ -346,14 +366,15 @@ export const translations = {
     exportSVG: "تصدير SVG",
     toggleOrientation: "تبديل الاتجاه",
     toggleTheme: "تبديل السمة",
+    togglePrintMode: "تخطيط الطباعة",
     analyze: "تحليل",
     active: "نشط",
     propertiesActions: "الخصائص والإجراءات",
     quickTips: "نصائح سريعة",
-    tip1: "اختر 'شبكة المرافق' لإضافة مكون رئيسي جديد.",
-    tip2: "انقر فوق ربط لتوصيل المكونات الموجودة.",
-    tip3: "إدارة المشاريع والصفحات في الشريط الجانبي.",
-    tip4: "انقر فوق عقدة للتعديل أو الحذف.",
+    tip1: "Shift+Click لتحديد عدة مكونات للتعديل الجماعي.",
+    tip2: "Ctrl+C / Ctrl+V لنسخ ولصق المكونات.",
+    tip3: "Del / Backspace لحذف العناصر المحددة.",
+    tip4: "Esc لإلغاء التحديد أو وضع الربط.",
     resetDiagram: "إعادة تعيين المخطط للافتراضي",
     saveStatus: { saved: "محفوظ", saving: "جاري الحفظ...", unsaved: "غير محفوظ" },
     undo: "تراجع",
@@ -375,7 +396,7 @@ export const translations = {
       target: "اختر المكون الثاني (ب) للربط."
     },
     legend: {
-      title: "المفتاح",
+      title: "مفتاح الرموز",
       meter: "عداد متصل"
     },
     mode: "الوضع",
@@ -392,6 +413,8 @@ export const translations = {
     inputPanel: {
       addConnection: "إضافة اتصال",
       editComponent: "تعديل المكون",
+      bulkEdit: "تعديل جماعي",
+      itemsSelected: "عناصر محددة",
       newDownstream: "مكون مصب جديد",
       editSelected: "تعديل المكون المحدد",
       parent: "الأصل",
@@ -410,6 +433,7 @@ export const translations = {
       description: "الوصف (اختياري)",
       addToDiagram: "إضافة إلى المخطط",
       saveChanges: "حفظ التغييرات",
+      applyBulk: "تطبيق على الكل",
       close: "إغلاق",
       deleteComponent: "حذف المكون",
       confirmDelete: "هل أنت متأكد أنك تريد حذف هذا المكون وجميع توابعه؟",
@@ -492,6 +516,12 @@ export const translations = {
       description: "VoltGraph AI هو منشئ ومحلل ذكي للمخططات أحادية الخط (SLD) مصمم للمهندسين الكهربائيين. يساعد في نمذجة الأنظمة الكهربائية، وتصور الاتصالات، ويوفر تحليل سلامة مدعوم بالذكاء الاصطناعي.",
       developedBy: "تم التطوير بواسطة",
       developerName: "صالح حمدان"
+    },
+    printLayout: {
+        project: "المشروع",
+        date: "التاريخ",
+        engineer: "المهندس",
+        rev: "الإصدار"
     }
   }
 };

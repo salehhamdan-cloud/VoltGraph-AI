@@ -1,27 +1,30 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import { ElectricalNode, ComponentType } from '../types';
+import { ElectricalNode, ComponentType, Project } from '../types';
 import { COMPONENT_CONFIG, ICON_PATHS } from '../constants';
 
 interface DiagramProps {
   data: ElectricalNode[];
-  onNodeClick: (node: ElectricalNode) => void;
+  onNodeClick: (node: ElectricalNode, isMulti: boolean) => void;
   onLinkClick: (targetNode: ElectricalNode) => void;
   onDuplicateChild: (node: ElectricalNode) => void;
   onDeleteNode: (node: ElectricalNode) => void;
   onToggleCollapse: (node: ElectricalNode) => void;
   onGroupNode: (node: ElectricalNode) => void;
-  onNodeMove?: (nodeId: string, x: number, y: number) => void;
+  onNodeMove?: (updates: {id: string, x: number, y: number}[]) => void;
   onAddRoot?: () => void;
   onAddGenerator?: () => void;
   onBackgroundClick?: () => void;
   selectedNodeId: string | null;
+  multiSelection: Set<string>;
   selectedLinkId: string | null;
   orientation: 'horizontal' | 'vertical';
   searchMatches: Set<string> | null;
   isConnectMode?: boolean;
   connectionSourceId?: string | null;
+  isPrintMode?: boolean;
+  activeProject?: Project;
   t: any;
   language: string;
   theme: 'light' | 'dark';
@@ -40,11 +43,14 @@ export const Diagram: React.FC<DiagramProps> = ({
     onAddGenerator,
     onBackgroundClick,
     selectedNodeId, 
+    multiSelection,
     selectedLinkId,
     orientation,
     searchMatches,
     isConnectMode = false,
     connectionSourceId = null,
+    isPrintMode = false,
+    activeProject,
     t,
     language,
     theme
@@ -57,7 +63,6 @@ export const Diagram: React.FC<DiagramProps> = ({
   const isRTL = language === 'he' || language === 'ar';
   const isDark = theme === 'dark';
 
-  // Theme Colors
   const bgColor = isDark ? '#0f172a' : '#ffffff';
   const dotColor = isDark ? '#1e293b' : '#e2e8f0';
   const linkColor = isDark ? '#cbd5e1' : '#334155';
@@ -132,6 +137,7 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const { width, height } = dimensions;
     
+    // Empty State
     if (!data || data.length === 0) {
          const g = svg.append("g")
              .attr("transform", `translate(${width/2},${height/2})`);
@@ -262,7 +268,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     });
 
-    // --- Dynamic Sizing with Badge Overlap Protection ---
+    // --- Dynamic Sizing ---
     const getNodeSize = (d: d3.HierarchyNode<ElectricalNode>) => {
         if (d.data.id === 'virtual-root') return { w: 1, h: 1 };
 
@@ -276,7 +282,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         if (d.data.voltage) specText += `${d.data.voltage}V`;
         if (d.data.kva) specText += `${d.data.kva}kVA`;
         
-        // Character width estimation
         const charWidth = 8.5;
         const nameLen = (displayName?.length || 0) * charWidth; 
         const typeLen = (compNum?.length || 0) * 7.5;
@@ -284,7 +289,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         const modelLen = model.length * 7;
         const descLen = Math.min(desc.length * 7, 220);
 
-        // Calculate Badge Widths to prevent overlap
         let badgeWidth = 0;
         if (d.data.hasMeter) {
              const mTextW = (d.data.meterNumber?.length || 0) * 8 + 10;
@@ -295,17 +299,15 @@ export const Diagram: React.FC<DiagramProps> = ({
              badgeWidth += 24 + (d.data.generatorName ? gTextW : 0);
         }
         if (d.data.hasMeter && d.data.hasGeneratorConnection) {
-            badgeWidth += 30; // Spacing between badges if both exist
+            badgeWidth += 30; 
         }
 
-        // Ensure node is wide enough for text AND badges
         const contentWidth = Math.max(nameLen, typeLen, specLen, modelLen, descLen, badgeWidth, 90); 
         const nodeW = contentWidth + 30; 
 
-        // Height Calculation
         let contentHeight = 25; 
-        contentHeight += 24; // Name
-        contentHeight += 16; // Number
+        contentHeight += 24; 
+        contentHeight += 16; 
         if (specText) contentHeight += 14;
         if (model) contentHeight += 14;
         if (desc) contentHeight += 14;
@@ -359,71 +361,12 @@ export const Diagram: React.FC<DiagramProps> = ({
     const nodesToRender = root.descendants().filter(d => d.depth > 0);
     const linksToRender = root.links().filter(d => d.source.data.id !== 'virtual-root');
 
-    const nodeLookup = new Map<string, d3.HierarchyNode<ElectricalNode>>();
-    nodesToRender.forEach(d => nodeLookup.set(d.data.id, d));
-
-    const drag = d3.drag<SVGGElement, d3.HierarchyNode<ElectricalNode>>()
-        .filter((event, d) => d.depth === 1) 
-        .on("start", function(event, d) {
-             (this as any).__isDragging = false;
-             (this as any).__totalDx = 0;
-             (this as any).__totalDy = 0;
-             d3.select(this).attr("data-is-dragging", "false");
-        })
-        .on("drag", function(event, d) {
-             (this as any).__totalDx += event.dx;
-             (this as any).__totalDy += event.dy;
-             const distSq = (this as any).__totalDx * (this as any).__totalDx + (this as any).__totalDy * (this as any).__totalDy;
-             if (distSq > 25) {
-                 (this as any).__isDragging = true;
-                 d3.select(this).attr("data-is-dragging", "true");
-                 d3.select(this).classed("active", true).raise();
-             }
-             if ((this as any).__isDragging) {
-                 if (orientation === 'horizontal') {
-                     d.data.manualX = (d.data.manualX || 0) + event.dx; 
-                     d.data.manualY = (d.data.manualY || 0) + event.dy;
-                     d3.select(this).attr("transform", `translate(${d.y + (d.data.manualX || 0)},${d.x + (d.data.manualY || 0)})`);
-                 } else {
-                     d.data.manualX = (d.data.manualX || 0) + event.dx;
-                     d.data.manualY = (d.data.manualY || 0) + event.dy;
-                     d3.select(this).attr("transform", `translate(${d.x + (d.data.manualX || 0)},${d.y + (d.data.manualY || 0)})`);
-                 }
-             }
-        })
-        .on("end", function(event, d) {
-            if ((this as any).__isDragging) {
-                d3.select(this).classed("active", false);
-                d3.select(this).attr("data-is-dragging", null);
-                if (onNodeMove) onNodeMove(d.data.id, d.data.manualX || 0, d.data.manualY || 0);
-            }
-        });
-
-    const extraLinksToRender: { source: d3.HierarchyNode<ElectricalNode>; target: d3.HierarchyNode<ElectricalNode>; }[] = [];
-    nodesToRender.forEach(d => {
-        if (d.data.extraConnections) {
-            d.data.extraConnections.forEach(targetId => {
-                const targetNode = nodeLookup.get(targetId);
-                if (targetNode) {
-                    extraLinksToRender.push({ source: targetNode, target: d });
-                }
-            });
-        }
-    });
-
-    // --- ALIGNMENT LOGIC (Fix for "same top line") ---
     const getRectBox = (d: any) => {
         const w = d.width;
         const h = d.height;
         if (orientation === 'horizontal') {
-            // Horizontal: Left-Aligned. Anchor (y, x) corresponds to (Left, MiddleY).
-            // Box starts at x=0 relative to anchor.
-            // Box centered vertically relative to anchor.
             return { x: 0, y: -h/2, w, h };
         } else {
-            // Vertical: Top-Aligned. Anchor (x, y) corresponds to (MiddleX, Top).
-            // Box starts at y=0 relative to anchor.
-            // Box centered horizontally relative to anchor.
             return { x: -w/2, y: 0, w, h };
         }
     };
@@ -435,39 +378,107 @@ export const Diagram: React.FC<DiagramProps> = ({
         const tYOffset = target.data.manualY || 0;
 
         if (orientation === 'horizontal') {
-            // Source (Parent) exits at Right Edge
             const srcX = source.y + source.width + sXOffset;
             const srcY = source.x + sYOffset;
-
-            // Target (Child) enters at Left Edge
             const tgtX = target.y + tXOffset;
             const tgtY = target.x + tYOffset;
-
-            return `M${srcX},${srcY}
-                    H${(srcX + tgtX) / 2}
-                    V${tgtY}
-                    H${tgtX}`;
+            return `M${srcX},${srcY} H${(srcX + tgtX) / 2} V${tgtY} H${tgtX}`;
         } else {
-            // Source (Parent) exits at Bottom
             const srcX = source.x + sXOffset;
             const srcY = source.y + source.height + sYOffset;
-
-            // Target (Child) enters at Top
             const tgtX = target.x + tXOffset;
             const tgtY = target.y + tYOffset;
-            
-            return `M${srcX},${srcY}
-                    V${(srcY + tgtY) / 2}
-                    H${tgtX}
-                    V${tgtY}`;
+            return `M${srcX},${srcY} V${(srcY + tgtY) / 2} H${tgtX} V${tgtY}`;
         }
     };
 
+    const extraLinksToRender: { source: d3.HierarchyNode<ElectricalNode>; target: d3.HierarchyNode<ElectricalNode>; }[] = [];
+    const nodeLookup = new Map<string, d3.HierarchyNode<ElectricalNode>>();
+    nodesToRender.forEach(d => nodeLookup.set(d.data.id, d));
+
+    nodesToRender.forEach(d => {
+        if (d.data.extraConnections) {
+            d.data.extraConnections.forEach(targetId => {
+                const targetNode = nodeLookup.get(targetId);
+                if (targetNode) {
+                    extraLinksToRender.push({ source: targetNode, target: d });
+                }
+            });
+        }
+    });
+
     const linksGroup = g.append('g').attr('class', 'links');
+
+    // Subtree Drag Behavior
+    const drag = d3.drag<SVGGElement, d3.HierarchyNode<ElectricalNode>>()
+        .on("start", function(event, d) {
+             const descendants = d.descendants();
+             descendants.forEach((desc: any) => {
+                 desc.__initialManualX = desc.data.manualX || 0;
+                 desc.__initialManualY = desc.data.manualY || 0;
+             });
+             d3.select(this).attr("data-is-dragging", "false");
+        })
+        .on("drag", function(event, d) {
+             if (!d.__isDragging && (event.dx*event.dx + event.dy*event.dy) > 0) {
+                 (this as any).__totalDx = ((this as any).__totalDx || 0) + event.dx;
+                 (this as any).__totalDy = ((this as any).__totalDy || 0) + event.dy;
+                 if (((this as any).__totalDx)**2 + ((this as any).__totalDy)**2 > 16) {
+                     (this as any).__isDragging = true;
+                 }
+             }
+
+             if ((this as any).__isDragging) {
+                 const descendants = d.descendants();
+                 descendants.forEach((desc: any) => {
+                     desc.data.manualX = (desc.data.manualX || 0) + event.dx;
+                     desc.data.manualY = (desc.data.manualY || 0) + event.dy;
+                     
+                     const el = g.select(`g.node[data-id="${desc.data.id}"]`);
+                     const offsetX = desc.data.manualX || 0;
+                     const offsetY = desc.data.manualY || 0;
+                     
+                     if (orientation === 'horizontal') {
+                         el.attr("transform", `translate(${desc.y + offsetX},${desc.x + offsetY})`);
+                     } else {
+                         el.attr("transform", `translate(${desc.x + offsetX},${desc.y + offsetY})`);
+                     }
+
+                     if (desc.parent) {
+                         g.select(`path.link-visible[data-target-id="${desc.data.id}"]`).attr('d', linkGenerator(desc.parent, desc));
+                         g.select(`path.link-hit[data-target-id="${desc.data.id}"]`).attr('d', linkGenerator(desc.parent, desc));
+                     }
+                     if (desc.children) {
+                         desc.children.forEach((child: any) => {
+                             g.select(`path.link-visible[data-target-id="${child.data.id}"]`).attr('d', linkGenerator(desc, child));
+                             g.select(`path.link-hit[data-target-id="${child.data.id}"]`).attr('d', linkGenerator(desc, child));
+                         });
+                     }
+                 });
+             }
+        })
+        .on("end", function(event, d) {
+            if ((this as any).__isDragging) {
+                (this as any).__isDragging = false;
+                (this as any).__totalDx = 0; (this as any).__totalDy = 0;
+                const updates: {id: string, x: number, y: number}[] = [];
+                d.descendants().forEach((desc: any) => {
+                    updates.push({
+                        id: desc.data.id,
+                        x: desc.data.manualX || 0,
+                        y: desc.data.manualY || 0
+                    });
+                });
+                if (onNodeMove) {
+                    onNodeMove(updates);
+                }
+            }
+        });
 
     const renderLinks = (selection: any, className: string, isHitArea = false) => {
         selection
           .attr('class', className)
+          .attr('data-target-id', (d: any) => d.target.data.id)
           .attr('d', (d: any) => linkGenerator(d.source, d.target))
           .attr('fill', 'none')
           .each(function(d: any) {
@@ -477,16 +488,10 @@ export const Diagram: React.FC<DiagramProps> = ({
               const isSelected = d.target.data.id === selectedLinkId;
               
               if (className === 'link-extra') {
-                  d3.select(this)
-                    .attr('stroke', isDark ? '#f59e0b' : '#d97706')
-                    .attr('stroke-width', 2.5)
-                    .attr('stroke-dasharray', '8,5')
-                    .attr('marker-end', 'url(#arrow-end-extra)')
-                    .attr('opacity', 0.8);
+                  d3.select(this).attr('stroke', isDark ? '#f59e0b' : '#d97706').attr('stroke-width', 2.5)
+                    .attr('stroke-dasharray', '8,5').attr('marker-end', 'url(#arrow-end-extra)').attr('opacity', 0.8);
               } else {
-                  d3.select(this)
-                    .attr('stroke', stroke)
-                    .attr('stroke-width', isSelected ? 4 : 2.5)
+                  d3.select(this).attr('stroke', stroke).attr('stroke-width', isSelected ? 4 : 2.5)
                     .attr('stroke-dasharray', style.lineStyle === 'dashed' ? '8,4' : style.lineStyle === 'dotted' ? '2,4' : 'none')
                     .attr('marker-start', style.startMarker && style.startMarker !== 'none' ? `url(#${style.startMarker}-start)` : null)
                     .attr('marker-end', style.endMarker && style.endMarker !== 'none' ? `url(#${style.endMarker}-end)` : null)
@@ -504,18 +509,17 @@ export const Diagram: React.FC<DiagramProps> = ({
     linksGroup.selectAll('path.link-extra').data(extraLinksToRender).enter().append('path').call(renderLinks, 'link-extra');
     linksGroup.selectAll('path.link-hit').data(linksToRender).enter().append('path')
         .attr('class', 'link-hit')
+        .attr('data-target-id', (d: any) => d.target.data.id)
         .attr('d', d => linkGenerator(d.source, d.target))
-        .attr('fill', 'none')
-        .attr('stroke', 'transparent')
-        .attr('stroke-width', 15)
-        .style('cursor', 'pointer')
+        .attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 15).style('cursor', 'pointer')
         .on('click', (e, d) => { e.stopPropagation(); onLinkClick(d.target.data); });
 
     const nodes = g.selectAll('g.node')
       .data(nodesToRender)
       .enter()
       .append('g')
-      .attr('class', (d) => `node group ${d.data.id === selectedNodeId ? 'selected' : ''}`)
+      .attr('class', (d) => `node group ${d.data.id === selectedNodeId || multiSelection.has(d.data.id) ? 'selected' : ''}`)
+      .attr('data-id', (d) => d.data.id) 
       .attr('transform', (d) => {
           const offsetX = d.data.manualX || 0;
           const offsetY = d.data.manualY || 0;
@@ -528,20 +532,20 @@ export const Diagram: React.FC<DiagramProps> = ({
         if ((this as any).__isDragging) { event.stopPropagation(); return; }
         if (event.defaultPrevented) return;
         event.stopPropagation();
-        onNodeClick(d.data);
+        onNodeClick(d.data, event.shiftKey);
       })
       .on('mouseenter', function(event, d) {
-          const isSelected = d.data.id === selectedNodeId;
+          const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
           const isSource = d.data.id === connectionSourceId;
           const el = d3.select(this);
-          if (d.depth === 1) el.style('cursor', 'move');
+          el.style('cursor', 'move'); 
           el.select('.action-buttons').style('opacity', 1).style('pointer-events', 'all');
           el.select('rect.node-bg').transition().duration(200)
             .attr('fill', isDark ? '#334155' : '#e2e8f0')
             .attr('stroke', isSource ? '#f59e0b' : (isSelected ? '#3b82f6' : '#64748b'));
       })
       .on('mouseleave', function(event, d) {
-          const isSelected = d.data.id === selectedNodeId;
+          const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
           const isSource = d.data.id === connectionSourceId;
           const el = d3.select(this);
           if (!isSelected) el.select('.action-buttons').style('opacity', 0).style('pointer-events', 'none');
@@ -549,7 +553,7 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('fill', (d: any) => d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
             .attr('stroke', isSource ? '#f59e0b' : (isSelected ? '#3b82f6' : secondaryTextColor));
       })
-      .style('cursor', (d) => d.depth === 1 ? 'move' : (isConnectMode ? 'crosshair' : 'pointer'))
+      .style('cursor', (d) => 'move')
       .style('opacity', (d) => {
          if (!searchMatches) return 1;
          if (searchMatches.has(d.data.id)) return 1;
@@ -561,85 +565,59 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     nodes.append('rect')
       .attr('class', 'node-bg')
-      .attr('width', d => d.width)
-      .attr('height', d => d.height)
-      .attr('x', d => getRectBox(d).x)
-      .attr('y', d => getRectBox(d).y)
-      .attr('rx', 12)
+      .attr('width', d => d.width).attr('height', d => d.height)
+      .attr('x', d => getRectBox(d).x).attr('y', d => getRectBox(d).y).attr('rx', 12)
       .attr('fill', (d) => d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
       .attr('stroke', (d) => {
           if (d.data.id === connectionSourceId) return '#f59e0b'; 
-          if (d.data.id === selectedNodeId) return '#3b82f6'; 
+          if (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) return '#3b82f6'; 
           return d.data.type === ComponentType.SYSTEM_ROOT ? '#64748b' : secondaryTextColor;
       })
-      .attr('stroke-width', (d) => (d.data.id === selectedNodeId || d.data.id === connectionSourceId) ? 3 : 1.5)
-      .style('filter', (d) => (d.data.id === selectedNodeId || d.data.id === connectionSourceId) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
+      .attr('stroke-width', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 3 : 1.5)
+      .style('filter', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
 
     nodes.filter((d: any) => d.data.isCollapsed && d._children && d._children.length > 0)
-         .append('circle')
-         .attr('r', 8)
-         .attr('cx', d => orientation === 'horizontal' ? d.width : 0)
-         .attr('cy', d => orientation === 'horizontal' ? 0 : d.height)
-         .attr('fill', dotColor)
-         .attr('stroke', secondaryTextColor)
-         .attr('stroke-width', 1)
-         .style('pointer-events', 'none');
+         .append('circle').attr('r', 8)
+         .attr('cx', d => orientation === 'horizontal' ? d.width : 0).attr('cy', d => orientation === 'horizontal' ? 0 : d.height)
+         .attr('fill', dotColor).attr('stroke', secondaryTextColor).attr('stroke-width', 1).style('pointer-events', 'none');
     
     nodes.filter((d: any) => d.data.isCollapsed && d._children && d._children.length > 0)
-         .append('text')
-         .attr('text-anchor', 'middle')
-         .attr('dominant-baseline', 'central')
-         .attr('x', d => orientation === 'horizontal' ? d.width : 0)
-         .attr('y', d => orientation === 'horizontal' ? 0 : d.height)
-         .attr('fill', secondaryTextColor)
-         .style('font-size', '12px')
-         .style('font-weight', 'bold')
-         .text('+');
+         .append('text').attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+         .attr('x', d => orientation === 'horizontal' ? d.width : 0).attr('y', d => orientation === 'horizontal' ? 0 : d.height)
+         .attr('fill', secondaryTextColor).style('font-size', '12px').style('font-weight', 'bold').text('+');
 
-    // Color Bar
     nodes.append('path')
       .attr('d', d => {
-          const r = 12;
-          const box = getRectBox(d);
+          const r = 12; const box = getRectBox(d);
           return `M${box.x},${box.y + 6} v${-6 + r} a${r},${r} 0 0 1 ${r},${-r} h${box.w - 2*r} a${r},${r} 0 0 1 ${r},${r} v${6 - r}`;
       })
       .attr('fill', (d) => d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8');
 
-    // Content Group
     const contentG = nodes.append('g')
         .attr('transform', d => {
             const box = getRectBox(d);
-            // Content starts ~25px below the top edge
-            if (orientation === 'horizontal') {
-                return `translate(${d.width/2}, ${box.y + 25})`;
-            } else {
-                return `translate(0, ${box.y + 25})`;
-            }
+            if (orientation === 'horizontal') return `translate(${d.width/2}, ${box.y + 25})`;
+            else return `translate(0, ${box.y + 25})`;
         });
 
-    contentG.append('circle')
-        .attr('r', 16).attr('cx', 0).attr('cy', 0)
+    contentG.append('circle').attr('r', 16).attr('cx', 0).attr('cy', 0)
         .attr('fill', isDark ? '#1e293b' : '#ffffff')
         .attr('stroke', (d) => d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8')
         .attr('stroke-width', 1.5);
 
-    contentG.append('path')
-        .attr('d', d => ICON_PATHS[COMPONENT_CONFIG[d.data.type]?.icon] || ICON_PATHS['help'])
+    contentG.append('path').attr('d', d => ICON_PATHS[COMPONENT_CONFIG[d.data.type]?.icon] || ICON_PATHS['help'])
         .attr('transform', 'translate(-9, -9) scale(0.75)') 
         .attr('fill', (d) => d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8');
 
-    // Name
     contentG.append('text').attr('x', 0).attr('y', 32).attr('text-anchor', 'middle')
       .style('font-size', '14px').style('font-weight', 'bold').style('fill', textColor) 
       .text((d) => getTranslatedName(d.data.name, d.data.type));
 
-    // Number/Type
     contentG.append('text').attr('x', 0).attr('y', 48).attr('text-anchor', 'middle')
       .style('font-size', '10px').style('font-weight', 'bold')
       .style('fill', (d) => d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8').style('opacity', 0.9)
       .text((d) => d.data.componentNumber || t.componentTypes[d.data.type] || d.data.type);
 
-    // Specs
     contentG.append('text').attr('x', 0).attr('y', 62).attr('text-anchor', 'middle')
       .style('font-size', '11px').style('fill', secondaryTextColor)
       .text((d) => {
@@ -666,76 +644,48 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     });
 
-    // --- Badge Helper ---
-    const getBadgeBaseY = (d: any) => {
-        const box = getRectBox(d);
-        // Place near bottom of rect
-        return box.y + box.h - 24; 
-    };
+    const getBadgeBaseY = (d: any) => { const box = getRectBox(d); return box.y + box.h - 24; };
 
-    // Meter Badge
-    nodes.filter(d => !!d.data.hasMeter)
-        .append('g')
-        .attr('transform', d => {
-             const box = getRectBox(d);
-             const y = getBadgeBaseY(d);
-             // Place at left side (+padding)
-             return `translate(${box.x + 8}, ${y})`;
-        })
+    nodes.filter(d => !!d.data.hasMeter).append('g')
+        .attr('transform', d => `translate(${getRectBox(d).x + 8}, ${getBadgeBaseY(d)})`)
         .call(g => {
              const textWidth = (d: any) => (d.data.meterNumber?.length || 0) * 8 + 10;
              const totalWidth = (d: any) => 24 + (d.data.meterNumber ? textWidth(d) : 0);
-
              g.append('rect').attr('height', 18).attr('width', totalWidth).attr('rx', 9)
                 .attr('fill', isDark ? '#1e3a8a' : '#dbeafe').attr('stroke', '#3b82f6').attr('stroke-width', 0.5);
-
              g.append('path').attr('d', ICON_PATHS['speed']).attr('transform', 'translate(3, 3) scale(0.5)').attr('fill', '#3b82f6');
-
              g.append('text').attr('x', 20).attr('y', 9).attr('dominant-baseline', 'central').attr('text-anchor', 'start')
                 .style('font-size', '9px').style('font-weight', 'bold').style('fill', '#3b82f6').style('direction', 'ltr')
                 .text(d => d.data.meterNumber || '');
              g.append('title').text(d => d.data.meterNumber ? `${t.legend.meter}: ${d.data.meterNumber}` : t.legend.meter);
         });
 
-    // Generator Badge
-    nodes.filter(d => !!d.data.hasGeneratorConnection)
-        .append('g')
+    nodes.filter(d => !!d.data.hasGeneratorConnection).append('g')
         .attr('transform', function(d) {
-             const box = getRectBox(d);
-             const y = getBadgeBaseY(d);
+             const box = getRectBox(d); const y = getBadgeBaseY(d);
              const textWidth = (d.data.generatorName?.length || 0) * 8 + 10;
              const totalWidth = 24 + (d.data.generatorName ? textWidth : 0);
-             // Place at right side (-padding)
              return `translate(${box.x + box.w - totalWidth - 8}, ${y})`;
         })
         .call(g => {
              const textWidth = (d: any) => (d.data.generatorName?.length || 0) * 8 + 10;
              const totalWidth = (d: any) => 24 + (d.data.generatorName ? textWidth(d) : 0);
-
              g.append('rect').attr('height', 18).attr('width', totalWidth).attr('rx', 9)
                 .attr('fill', isDark ? '#7f1d1d' : '#fee2e2').attr('stroke', '#ef4444').attr('stroke-width', 0.5);
-
              g.append('path').attr('d', ICON_PATHS['letter_g']).attr('transform', 'translate(3, 3) scale(0.5)').attr('fill', '#ef4444');
-            
              g.append('text').attr('x', 20).attr('y', 9).attr('dominant-baseline', 'central').attr('text-anchor', 'start')
                 .style('font-size', '9px').style('font-weight', 'bold').style('fill', '#ef4444').style('direction', 'ltr')
                 .text(d => d.data.generatorName || '');
              g.append('title').text(d => d.data.generatorName ? `${t.inputPanel.includesGenerator}: ${d.data.generatorName}` : t.inputPanel.includesGenerator);
         });
 
-    // Action Buttons
     nodes.append('g')
         .attr('class', 'action-buttons')
-        .attr('transform', d => {
-            const box = getRectBox(d);
-            // Position outside to the right
-            return `translate(${box.x + box.w + 12}, ${box.y + box.h/2})`;
-        })
+        .attr('transform', d => { const box = getRectBox(d); return `translate(${box.x + box.w + 12}, ${box.y + box.h/2})`; })
         .style('opacity', d => d.data.id === selectedNodeId ? 1 : 0)
         .style('pointer-events', d => d.data.id === selectedNodeId ? 'all' : 'none')
         .style('transition', 'opacity 0.2s')
         .call(g => {
-            // Add
             g.append('g').attr('transform', 'translate(0, -28)').style('cursor', 'pointer')
                 .on('click', (e, d) => { e.stopPropagation(); onDuplicateChild(d.data); })
                 .call(btn => {
@@ -743,8 +693,6 @@ export const Diagram: React.FC<DiagramProps> = ({
                     btn.append('path').attr('d', ICON_PATHS['add']).attr('transform', 'translate(-8, -8) scale(0.66)').attr('fill', 'white');
                     btn.append('title').text(t.inputPanel.addConnection);
                 });
-            
-            // Collapse
             g.filter((d: any) => (d.children && d.children.length > 0) || (d._children && d._children.length > 0))
                 .append('g').attr('transform', 'translate(0, 0)').style('cursor', 'pointer')
                 .on('click', (e, d) => { e.stopPropagation(); onToggleCollapse(d.data); })
@@ -754,8 +702,6 @@ export const Diagram: React.FC<DiagramProps> = ({
                        .attr('transform', 'translate(-8, -8) scale(0.66)').attr('fill', 'white');
                     btn.append('title').text(d => d.data.isCollapsed ? t.inputPanel.expand : t.inputPanel.collapse);
                 });
-
-            // Group
             g.filter(d => d.depth > 1).append('g').attr('transform', 'translate(0, 28)').style('cursor', 'pointer')
                 .on('click', (e, d) => { e.stopPropagation(); onGroupNode(d.data); })
                 .call(btn => {
@@ -763,8 +709,6 @@ export const Diagram: React.FC<DiagramProps> = ({
                     btn.append('path').attr('d', ICON_PATHS['folder_open']).attr('transform', 'translate(-8, -8) scale(0.66)').attr('fill', 'white');
                     btn.append('title').text(t.inputPanel.groupNode);
                 });
-
-            // Delete
             g.append('g').attr('transform', 'translate(0, 56)').style('cursor', 'pointer')
                 .on('click', (e, d) => { e.stopPropagation(); onDeleteNode(d.data); })
                 .call(btn => {
@@ -774,7 +718,163 @@ export const Diagram: React.FC<DiagramProps> = ({
                 });
         });
 
-  }, [data, dimensions, onNodeClick, onLinkClick, selectedNodeId, selectedLinkId, orientation, searchMatches, isConnectMode, connectionSourceId, t, language, theme, onBackgroundClick]);
+    // --- Calculate Dynamic Content Bounds ---
+    const leaves = root.leaves();
+    let maxY = 600;
+    let maxX = 800;
+    let minX = 0;
+    let minY = 0;
+
+    nodesToRender.forEach((d: any) => {
+        const box = getRectBox(d);
+        const offsetX = d.data.manualX || 0;
+        const offsetY = d.data.manualY || 0;
+        let absoluteX, absoluteY;
+        if (orientation === 'horizontal') {
+            absoluteX = d.y + offsetX;
+            absoluteY = d.x + offsetY;
+        } else {
+            absoluteX = d.x + offsetX;
+            absoluteY = d.y + offsetY;
+        }
+        const left = absoluteX + box.x;
+        const right = absoluteX + box.x + box.w;
+        const top = absoluteY + box.y;
+        const bottom = absoluteY + box.y + box.h;
+        maxX = Math.max(maxX, right);
+        maxY = Math.max(maxY, bottom);
+        minX = Math.min(minX, left);
+        minY = Math.min(minY, top);
+    });
+    
+    maxX = Math.max(maxX, 800);
+    maxY = Math.max(maxY, 600);
+
+    // --- PRINT LAYOUT TITLE BLOCK ---
+    if (isPrintMode && activeProject) {
+        const blockW = 400;
+        const blockH = 120;
+        // FIXED: Start AFTER content (maxX + 50) to avoid overlap
+        const xStart = maxX + 50; 
+        const yStart = maxY + 50 - blockH;
+
+        const titleBlock = g.append('g').attr('transform', `translate(${xStart}, ${yStart})`);
+        
+        titleBlock.append('rect').attr('width', blockW).attr('height', blockH)
+            .attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', 2);
+        
+        const dividerX = isRTL ? blockW * 0.3 : blockW * 0.7;
+
+        titleBlock.append('line').attr('x1', 0).attr('y1', blockH/2).attr('x2', blockW).attr('y2', blockH/2)
+            .attr('stroke', textColor).attr('stroke-width', 1);
+        titleBlock.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', blockH/2)
+            .attr('stroke', textColor).attr('stroke-width', 1);
+
+        const addText = (text: string, xBase: number, y: number, size: number = 12, weight: string = 'normal', anchor: string = 'start') => {
+            titleBlock.append('text')
+                .attr('x', xBase)
+                .attr('y', y)
+                .text(text)
+                .attr('fill', textColor)
+                .attr('font-size', `${size}px`)
+                .attr('font-weight', weight)
+                .attr('text-anchor', anchor)
+                .style('font-family', 'sans-serif');
+        };
+
+        if (isRTL) {
+            addText(t.printLayout.project, blockW - 10, 20, 10, 'bold', 'start');
+            addText(activeProject.name, blockW - 10, 45, 16, 'bold', 'start');
+            addText(t.printLayout.date, dividerX - 10, 20, 10, 'bold', 'start');
+            addText(new Date().toLocaleDateString(), dividerX - 10, 45, 12, 'normal', 'start');
+            addText(t.printLayout.engineer, blockW - 10, blockH/2 + 20, 10, 'bold', 'start');
+            addText("Saleh Hamdan", blockW - 10, blockH - 15, 14, 'normal', 'start');
+            addText(t.printLayout.rev, dividerX - 10, blockH/2 + 20, 10, 'bold', 'start');
+            addText("1.0", dividerX - 10, blockH - 15, 14, 'normal', 'start');
+        } else {
+            addText(t.printLayout.project, 10, 20, 10, 'bold', 'start');
+            addText(activeProject.name, 10, 45, 16, 'bold', 'start');
+            addText(t.printLayout.date, dividerX + 10, 20, 10, 'bold', 'start');
+            addText(new Date().toLocaleDateString(), dividerX + 10, 45, 12, 'normal', 'start');
+            addText(t.printLayout.engineer, 10, blockH/2 + 20, 10, 'bold', 'start');
+            addText("Saleh Hamdan", 10, blockH - 15, 14, 'normal', 'start');
+            addText(t.printLayout.rev, dividerX + 10, blockH/2 + 20, 10, 'bold', 'start');
+            addText("1.0", dividerX + 10, blockH - 15, 14, 'normal', 'start');
+        }
+    }
+
+    // --- COMPONENT LEGEND (Moved inside `g`) ---
+    const legendW = 160;
+    const legendH = 280;
+    
+    let legX, legY;
+
+    if (isPrintMode && activeProject) {
+        const blockH = 120;
+        const xStart = maxX + 50; // Matches Title Block start
+        const yStart = maxY + 50 - blockH;
+        
+        // Align Right Edge of Legend with Right Edge of Title Block
+        legX = xStart + 400 - legendW;
+        legY = yStart - legendH - 10; 
+    } else {
+        // Normal Mode: Place to the right of the content
+        legX = maxX + 50;
+        legY = minY;
+    }
+
+    const legendG = g.append('g')
+        .attr('class', 'legend-group')
+        .attr('transform', `translate(${legX}, ${legY})`); 
+
+    legendG.append('rect')
+        .attr('width', legendW)
+        .attr('height', legendH)
+        .attr('rx', 8)
+        .attr('fill', isDark ? '#1e293b' : '#ffffff') 
+        .attr('stroke', secondaryTextColor)
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.95);
+
+    legendG.append('text')
+        .attr('x', legendW / 2)
+        .attr('y', 25)
+        .attr('text-anchor', 'middle')
+        .attr('font-weight', 'bold')
+        .attr('fill', textColor)
+        .attr('font-size', '12px')
+        .text(t.legend.title);
+
+    const types = Object.values(ComponentType);
+    types.forEach((type, i) => {
+        const y = 50 + i * 28;
+        const config = COMPONENT_CONFIG[type];
+        
+        legendG.append('circle')
+            .attr('cx', 20)
+            .attr('cy', y)
+            .attr('r', 8)
+            .attr('fill', isDark ? '#0f172a' : '#f8fafc')
+            .attr('stroke', config.color)
+            .attr('stroke-width', 1.5);
+        
+        legendG.append('path')
+            .attr('d', ICON_PATHS[config.icon])
+            .attr('transform', `translate(${20-6}, ${y-6}) scale(0.5)`) 
+            .attr('fill', config.color);
+            
+        legendG.append('text')
+            .attr('x', 38)
+            .attr('y', y + 4)
+            .attr('fill', textColor)
+            .attr('font-size', '11px')
+            .attr('text-anchor', 'start')
+            .style('direction', 'ltr') 
+            .text(t.componentTypes[type]);
+    });
+
+
+  }, [data, dimensions, onNodeClick, onLinkClick, selectedNodeId, selectedLinkId, orientation, searchMatches, isConnectMode, connectionSourceId, t, language, theme, onBackgroundClick, multiSelection, isPrintMode, activeProject]);
 
   return (
     <div ref={wrapperRef} className={`w-full h-full relative overflow-hidden ${isDark ? 'bg-slate-900' : 'bg-white'}`} style={{ touchAction: 'none' }}>
