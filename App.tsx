@@ -14,11 +14,13 @@ import { translations } from './translations';
 type Language = 'en' | 'he' | 'ar';
 type Theme = 'light' | 'dark';
 
-function App() {
+export default function App() {
   const [projects, setProjects] = useState<Project[]>(() => {
     try {
       const savedData = localStorage.getItem('voltgraph_data');
       let loadedProjects = savedData ? JSON.parse(savedData) : [DEFAULT_PROJECT];
+      
+      // Data Migration: Convert legacy rootNode to items[] array
       loadedProjects = loadedProjects.map((p: any) => ({
           ...p,
           pages: p.pages.map((page: any) => {
@@ -28,6 +30,7 @@ function App() {
               return page;
           })
       }));
+      
       return loadedProjects;
     } catch (e) {
       console.error("Failed to load data from local storage", e);
@@ -85,6 +88,25 @@ function App() {
   const activePage = activeProject.pages.find(p => p.id === activePageId) || activeProject.pages[0];
   
   const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+  // --- Helpers ---
+  const findNodeInTree = (node: ElectricalNode, id: string): ElectricalNode | null => {
+      if (node.id === id) return node;
+      for (const child of node.children) {
+          const found = findNodeInTree(child, id);
+          if (found) return found;
+      }
+      return null;
+  };
+
+  const findNode = (roots: ElectricalNode[], id: string): ElectricalNode | null => {
+    for (const root of roots) {
+        if (root.id === id) return root;
+        const found = findNodeInTree(root, id);
+        if (found) return found;
+    }
+    return null;
+  };
 
   const requestConfirmation = (title: string, message: string, action: () => void) => {
     setConfirmModal({
@@ -152,6 +174,53 @@ function App() {
       });
   };
 
+  // --- State Modifiers ---
+  const addNodeToTree = (currentNode: ElectricalNode, parentId: string, newNode: ElectricalNode): ElectricalNode => {
+    if (currentNode.id === parentId) {
+      return { ...currentNode, children: [...currentNode.children, newNode] };
+    }
+    return { ...currentNode, children: currentNode.children.map(child => addNodeToTree(child, parentId, newNode)) };
+  };
+
+  const editNodeInTree = (currentNode: ElectricalNode, nodeId: string, updatedData: Partial<ElectricalNode>): ElectricalNode => {
+    if (currentNode.id === nodeId) {
+      return { ...currentNode, ...updatedData };
+    }
+    return { ...currentNode, children: currentNode.children.map(child => editNodeInTree(child, nodeId, updatedData)) };
+  };
+
+  const addExtraConnectionToTree = (currentNode: ElectricalNode, nodeId: string, targetId: string): ElectricalNode => {
+    if (currentNode.id === nodeId) {
+        const currentExtras = currentNode.extraConnections || [];
+        if (currentExtras.includes(targetId)) return currentNode;
+        return { ...currentNode, extraConnections: [...currentExtras, targetId] };
+    }
+    return { ...currentNode, children: currentNode.children.map(child => addExtraConnectionToTree(child, nodeId, targetId)) };
+  };
+
+  const removeExtraConnectionFromTree = (currentNode: ElectricalNode, targetIdToRemove: string): ElectricalNode => {
+      let newNode = { ...currentNode };
+      if (newNode.extraConnections && newNode.extraConnections.includes(targetIdToRemove)) {
+          newNode.extraConnections = newNode.extraConnections.filter(id => id !== targetIdToRemove);
+      }
+      newNode.children = newNode.children.map(child => removeExtraConnectionFromTree(child, targetIdToRemove));
+      return newNode;
+  };
+
+  const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): ElectricalNode => {
+     const isDirectChild = currentNode.children.some(child => child.id === nodeIdToDelete);
+     if (isDirectChild) {
+         return {
+             ...currentNode,
+             children: currentNode.children.filter(child => child.id !== nodeIdToDelete)
+         };
+     }
+     return {
+         ...currentNode,
+         children: currentNode.children.map(child => deleteNodeInTree(child, nodeIdToDelete))
+     };
+  };
+
   // --- Copy & Paste Logic ---
   const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
       const newId = generateId(String(node.type));
@@ -165,9 +234,17 @@ function App() {
 
   const handleCopy = useCallback(() => {
       if (selectedNode) {
-          setClipboard(JSON.parse(JSON.stringify(selectedNode)));
+          const freshNode = findNode(activePage.items, selectedNode.id);
+          if (freshNode) {
+              try {
+                  const copy = JSON.parse(JSON.stringify(freshNode));
+                  setClipboard(copy);
+              } catch (e) {
+                  console.error("Copy failed:", e);
+              }
+          }
       }
-  }, [selectedNode]);
+  }, [selectedNode, activePage.items]);
 
   const handlePaste = useCallback(() => {
       if (!clipboard) return;
@@ -215,7 +292,6 @@ function App() {
           return { ...page, items: newItems };
       });
 
-      // Reset selection
       setMultiSelection(new Set());
       setSelectedNode(null);
       setIsConnectMode(false);
@@ -246,12 +322,8 @@ function App() {
   const handleDeleteNodeClick = useCallback((node?: ElectricalNode) => {
       const nodeToDelete = node || selectedNode;
       if (!nodeToDelete) return;
-      // Direct confirm call for keyboard shortcut flow, as modal state + effect cycle can be tricky for hotkeys
-      // But let's try to reuse the modal if possible. 
-      // For reliability in hotkeys, standard window.confirm is safer than custom modal state which might be stale in closure.
-      // However, requestConfirmation updates state.
       requestConfirmation(t.dialogs.deleteNodeTitle, t.dialogs.deleteNode, () => executeDeleteNode(nodeToDelete));
-  }, [selectedNode, t]); // Dependencies crucial
+  }, [selectedNode, t]);
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -261,7 +333,6 @@ function App() {
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
       if (!isInput) {
-          // Undo / Redo
           if (isCtrl && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             e.shiftKey ? handleRedo() : handleUndo();
@@ -271,10 +342,9 @@ function App() {
               handleRedo();
           }
           
-          // Delete
           if (e.key === 'Delete' || e.key === 'Backspace') {
              if (multiSelection.size > 0) {
-                 if(window.confirm(t.dialogs.deleteNode)) { // Use native confirm for hotkey reliability
+                 if(window.confirm(t.dialogs.deleteNode)) { 
                      executeBulkDelete(multiSelection);
                  }
              } else if (selectedNode) {
@@ -284,19 +354,16 @@ function App() {
              }
           }
 
-          // Copy
           if (isCtrl && e.key.toLowerCase() === 'c') {
               e.preventDefault();
               handleCopy();
           }
           
-          // Paste
           if (isCtrl && e.key.toLowerCase() === 'v') {
               e.preventDefault();
               handlePaste();
           }
 
-          // Escape
           if (e.key === 'Escape') {
               e.preventDefault();
               setSelectionMode('node');
@@ -346,70 +413,6 @@ function App() {
     setIsConnectMode(false);
     setConnectionSource(null);
     setShowAddIndependentMenu(false);
-  };
-
-  const addNodeToTree = (currentNode: ElectricalNode, parentId: string, newNode: ElectricalNode): ElectricalNode => {
-    if (currentNode.id === parentId) {
-      return { ...currentNode, children: [...currentNode.children, newNode] };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => addNodeToTree(child, parentId, newNode)) };
-  };
-
-  const editNodeInTree = (currentNode: ElectricalNode, nodeId: string, updatedData: Partial<ElectricalNode>): ElectricalNode => {
-    if (currentNode.id === nodeId) {
-      return { ...currentNode, ...updatedData };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => editNodeInTree(child, nodeId, updatedData)) };
-  };
-
-  const addExtraConnectionToTree = (currentNode: ElectricalNode, nodeId: string, targetId: string): ElectricalNode => {
-    if (currentNode.id === nodeId) {
-        const currentExtras = currentNode.extraConnections || [];
-        if (currentExtras.includes(targetId)) return currentNode;
-        return { ...currentNode, extraConnections: [...currentExtras, targetId] };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => addExtraConnectionToTree(child, nodeId, targetId)) };
-  };
-
-  const removeExtraConnectionFromTree = (currentNode: ElectricalNode, targetIdToRemove: string): ElectricalNode => {
-      let newNode = { ...currentNode };
-      if (newNode.extraConnections && newNode.extraConnections.includes(targetIdToRemove)) {
-          newNode.extraConnections = newNode.extraConnections.filter(id => id !== targetIdToRemove);
-      }
-      newNode.children = newNode.children.map(child => removeExtraConnectionFromTree(child, targetIdToRemove));
-      return newNode;
-  };
-
-  const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): ElectricalNode => {
-     const isDirectChild = currentNode.children.some(child => child.id === nodeIdToDelete);
-     if (isDirectChild) {
-         return {
-             ...currentNode,
-             children: currentNode.children.filter(child => child.id !== nodeIdToDelete)
-         };
-     }
-     return {
-         ...currentNode,
-         children: currentNode.children.map(child => deleteNodeInTree(child, nodeIdToDelete))
-     };
-  };
-
-  const findNode = (roots: ElectricalNode[], id: string): ElectricalNode | null => {
-    for (const root of roots) {
-        if (root.id === id) return root;
-        const found = findNodeInTree(root, id);
-        if (found) return found;
-    }
-    return null;
-  };
-
-  const findNodeInTree = (node: ElectricalNode, id: string): ElectricalNode | null => {
-      if (node.id === id) return node;
-      for (const child of node.children) {
-          const found = findNodeInTree(child, id);
-          if (found) return found;
-      }
-      return null;
   };
 
   const handleConnectNodes = (inputChildId: string, inputParentId: string) => {
@@ -679,7 +682,6 @@ function App() {
       });
   };
 
-  // Updated handleNodeMove to support subtree movement
   const handleNodeMove = (updates: {id: string, x: number, y: number}[]) => {
       const updateMap = new Map(updates.map(u => [u.id, u]));
       
@@ -926,9 +928,9 @@ function App() {
     const file = event.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = (e) => {
         try {
-            const content = reader.result;
+            const content = (e.target as FileReader).result;
             if (typeof content !== 'string') return;
             
             let importedData: any = JSON.parse(content);
@@ -1378,5 +1380,3 @@ function App() {
     </div>
   );
 }
-
-export default App;

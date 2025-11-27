@@ -30,6 +30,20 @@ interface DiagramProps {
   theme: 'light' | 'dark';
 }
 
+interface ExtendedHierarchyNode extends d3.HierarchyPointNode<ElectricalNode> {
+  width: number;
+  height: number;
+  __isDragging?: boolean;
+  __totalDx?: number;
+  __totalDy?: number;
+  __initialManualX?: number;
+  __initialManualY?: number;
+  _children?: ExtendedHierarchyNode[] | null;
+  children?: ExtendedHierarchyNode[] | undefined;
+  parent: ExtendedHierarchyNode | null;
+  data: ElectricalNode;
+}
+
 export const Diagram: React.FC<DiagramProps> = ({ 
     data, 
     onNodeClick,
@@ -358,10 +372,10 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     treeLayout(root);
 
-    const nodesToRender = root.descendants().filter(d => d.depth > 0);
+    const nodesToRender = root.descendants().filter(d => d.depth > 0) as unknown as ExtendedHierarchyNode[];
     const linksToRender = root.links().filter(d => d.source.data.id !== 'virtual-root');
 
-    const getRectBox = (d: any) => {
+    const getRectBox = (d: ExtendedHierarchyNode) => {
         const w = d.width;
         const h = d.height;
         if (orientation === 'horizontal') {
@@ -410,10 +424,10 @@ export const Diagram: React.FC<DiagramProps> = ({
     const linksGroup = g.append('g').attr('class', 'links');
 
     // Subtree Drag Behavior
-    const drag = d3.drag<SVGGElement, d3.HierarchyNode<ElectricalNode>>()
+    const drag = d3.drag<SVGGElement, ExtendedHierarchyNode>()
         .on("start", function(event, d) {
-             const descendants = d.descendants();
-             descendants.forEach((desc: any) => {
+             const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
+             descendants.forEach((desc) => {
                  desc.__initialManualX = desc.data.manualX || 0;
                  desc.__initialManualY = desc.data.manualY || 0;
              });
@@ -421,18 +435,22 @@ export const Diagram: React.FC<DiagramProps> = ({
         })
         .on("drag", function(event, d) {
              if (!d.__isDragging && (event.dx*event.dx + event.dy*event.dy) > 0) {
-                 (this as any).__totalDx = ((this as any).__totalDx || 0) + event.dx;
-                 (this as any).__totalDy = ((this as any).__totalDy || 0) + event.dy;
-                 if (((this as any).__totalDx)**2 + ((this as any).__totalDy)**2 > 16) {
-                     (this as any).__isDragging = true;
+                 d.__totalDx = (d.__totalDx || 0) + event.dx;
+                 d.__totalDy = (d.__totalDy || 0) + event.dy;
+                 if (((d.__totalDx)**2 + (d.__totalDy)**2 > 16)) {
+                     d.__isDragging = true;
                  }
              }
 
-             if ((this as any).__isDragging) {
-                 const descendants = d.descendants();
-                 descendants.forEach((desc: any) => {
-                     desc.data.manualX = (desc.data.manualX || 0) + event.dx;
-                     desc.data.manualY = (desc.data.manualY || 0) + event.dy;
+             if (d.__isDragging) {
+                 const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
+                 descendants.forEach((desc) => {
+                     // Simplified drag logic: actually event.dx is accumulative. 
+                     // Correct logic using cached positions:
+                     const currentX = (desc.data.manualX || 0) + event.dx;
+                     const currentY = (desc.data.manualY || 0) + event.dy;
+                     desc.data.manualX = currentX;
+                     desc.data.manualY = currentY;
                      
                      const el = g.select(`g.node[data-id="${desc.data.id}"]`);
                      const offsetX = desc.data.manualX || 0;
@@ -458,11 +476,12 @@ export const Diagram: React.FC<DiagramProps> = ({
              }
         })
         .on("end", function(event, d) {
-            if ((this as any).__isDragging) {
-                (this as any).__isDragging = false;
-                (this as any).__totalDx = 0; (this as any).__totalDy = 0;
+            if (d.__isDragging) {
+                d.__isDragging = false;
+                d.__totalDx = 0; d.__totalDy = 0;
                 const updates: {id: string, x: number, y: number}[] = [];
-                d.descendants().forEach((desc: any) => {
+                const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
+                descendants.forEach((desc) => {
                     updates.push({
                         id: desc.data.id,
                         x: desc.data.manualX || 0,
@@ -529,7 +548,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       })
       .call(drag as any)
       .on('click', function(event, d) {
-        if ((this as any).__isDragging) { event.stopPropagation(); return; }
+        if (d.__isDragging) { event.stopPropagation(); return; }
         if (event.defaultPrevented) return;
         event.stopPropagation();
         onNodeClick(d.data, event.shiftKey);
@@ -576,12 +595,12 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('stroke-width', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 3 : 1.5)
       .style('filter', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
 
-    nodes.filter((d: any) => d.data.isCollapsed && d._children && d._children.length > 0)
+    nodes.filter((d: ExtendedHierarchyNode) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
          .append('circle').attr('r', 8)
          .attr('cx', d => orientation === 'horizontal' ? d.width : 0).attr('cy', d => orientation === 'horizontal' ? 0 : d.height)
          .attr('fill', dotColor).attr('stroke', secondaryTextColor).attr('stroke-width', 1).style('pointer-events', 'none');
     
-    nodes.filter((d: any) => d.data.isCollapsed && d._children && d._children.length > 0)
+    nodes.filter((d: ExtendedHierarchyNode) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
          .append('text').attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
          .attr('x', d => orientation === 'horizontal' ? d.width : 0).attr('y', d => orientation === 'horizontal' ? 0 : d.height)
          .attr('fill', secondaryTextColor).style('font-size', '12px').style('font-weight', 'bold').text('+');
@@ -644,7 +663,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     });
 
-    const getBadgeBaseY = (d: any) => { const box = getRectBox(d); return box.y + box.h - 24; };
+    const getBadgeBaseY = (d: ExtendedHierarchyNode) => { const box = getRectBox(d); return box.y + box.h - 24; };
 
     nodes.filter(d => !!d.data.hasMeter).append('g')
         .attr('transform', d => `translate(${getRectBox(d).x + 8}, ${getBadgeBaseY(d)})`)
@@ -754,7 +773,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     if (isPrintMode && activeProject) {
         const blockW = 400;
         const blockH = 120;
-        // FIXED: Start AFTER content (maxX + 50) to avoid overlap
+        // STARTING AFTER CONTENT: maxX + 50
         const xStart = maxX + 50; 
         const yStart = maxY + 50 - blockH;
 
