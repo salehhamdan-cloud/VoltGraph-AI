@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
@@ -13,6 +12,84 @@ import { translations } from './translations';
 
 type Language = 'en' | 'he' | 'ar';
 type Theme = 'light' | 'dark';
+
+// --- Helper Functions (Moved outside component for stability) ---
+
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+const findNodeInTree = (node: ElectricalNode, id: string): ElectricalNode | null => {
+    if (node.id === id) return node;
+    for (const child of node.children) {
+        const found = findNodeInTree(child, id);
+        if (found) return found;
+    }
+    return null;
+};
+
+const findNode = (roots: ElectricalNode[], id: string): ElectricalNode | null => {
+  for (const root of roots) {
+      if (root.id === id) return root;
+      const found = findNodeInTree(root, id);
+      if (found) return found;
+  }
+  return null;
+};
+
+const addNodeToTree = (currentNode: ElectricalNode, parentId: string, newNode: ElectricalNode): ElectricalNode => {
+  if (currentNode.id === parentId) {
+    return { ...currentNode, children: [...currentNode.children, newNode] };
+  }
+  return { ...currentNode, children: currentNode.children.map(child => addNodeToTree(child, parentId, newNode)) };
+};
+
+const editNodeInTree = (currentNode: ElectricalNode, nodeId: string, updatedData: Partial<ElectricalNode>): ElectricalNode => {
+  if (currentNode.id === nodeId) {
+    return { ...currentNode, ...updatedData };
+  }
+  return { ...currentNode, children: currentNode.children.map(child => editNodeInTree(child, nodeId, updatedData)) };
+};
+
+const addExtraConnectionToTree = (currentNode: ElectricalNode, nodeId: string, targetId: string): ElectricalNode => {
+  if (currentNode.id === nodeId) {
+      const currentExtras = currentNode.extraConnections || [];
+      if (currentExtras.includes(targetId)) return currentNode;
+      return { ...currentNode, extraConnections: [...currentExtras, targetId] };
+  }
+  return { ...currentNode, children: currentNode.children.map(child => addExtraConnectionToTree(child, nodeId, targetId)) };
+};
+
+const removeExtraConnectionFromTree = (currentNode: ElectricalNode, targetIdToRemove: string): ElectricalNode => {
+    let newNode = { ...currentNode };
+    if (newNode.extraConnections && newNode.extraConnections.includes(targetIdToRemove)) {
+        newNode.extraConnections = newNode.extraConnections.filter(id => id !== targetIdToRemove);
+    }
+    newNode.children = newNode.children.map(child => removeExtraConnectionFromTree(child, targetIdToRemove));
+    return newNode;
+};
+
+const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): ElectricalNode => {
+   const isDirectChild = currentNode.children.some(child => child.id === nodeIdToDelete);
+   if (isDirectChild) {
+       return {
+           ...currentNode,
+           children: currentNode.children.filter(child => child.id !== nodeIdToDelete)
+       };
+   }
+   return {
+       ...currentNode,
+       children: currentNode.children.map(child => deleteNodeInTree(child, nodeIdToDelete))
+   };
+};
+
+const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
+    const newId = generateId(`${node.type}`);
+    return {
+        ...node,
+        id: newId,
+        children: node.children.map(child => cloneNodeTree(child)),
+        extraConnections: [] // Clear external connections for clean copy
+    };
+};
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -48,6 +125,7 @@ export default function App() {
   const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState<'node' | 'link'>('node');
   const [clipboard, setClipboard] = useState<ElectricalNode | null>(null);
+  const [selectedLinkParentId, setSelectedLinkParentId] = useState<string | null>(null);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -86,27 +164,6 @@ export default function App() {
 
   const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
   const activePage = activeProject.pages.find(p => p.id === activePageId) || activeProject.pages[0];
-  
-  const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-  // --- Helpers ---
-  const findNodeInTree = (node: ElectricalNode, id: string): ElectricalNode | null => {
-      if (node.id === id) return node;
-      for (const child of node.children) {
-          const found = findNodeInTree(child, id);
-          if (found) return found;
-      }
-      return null;
-  };
-
-  const findNode = (roots: ElectricalNode[], id: string): ElectricalNode | null => {
-    for (const root of roots) {
-        if (root.id === id) return root;
-        const found = findNodeInTree(root, id);
-        if (found) return found;
-    }
-    return null;
-  };
 
   const requestConfirmation = (title: string, message: string, action: () => void) => {
     setConfirmModal({
@@ -159,7 +216,8 @@ export default function App() {
     }
   }, [future, projects, activeProjectId, activePageId]);
 
-  const updatePage = (updater: (page: Page) => Page) => {
+  // Memoized page updater to prevent stale closures
+  const updatePage = useCallback((updater: (page: Page) => Page) => {
       setProjects(prevProjects => {
           return prevProjects.map(p => {
               if (p.id !== activeProjectId) return p;
@@ -172,71 +230,15 @@ export default function App() {
               };
           });
       });
-  };
-
-  // --- State Modifiers ---
-  const addNodeToTree = (currentNode: ElectricalNode, parentId: string, newNode: ElectricalNode): ElectricalNode => {
-    if (currentNode.id === parentId) {
-      return { ...currentNode, children: [...currentNode.children, newNode] };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => addNodeToTree(child, parentId, newNode)) };
-  };
-
-  const editNodeInTree = (currentNode: ElectricalNode, nodeId: string, updatedData: Partial<ElectricalNode>): ElectricalNode => {
-    if (currentNode.id === nodeId) {
-      return { ...currentNode, ...updatedData };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => editNodeInTree(child, nodeId, updatedData)) };
-  };
-
-  const addExtraConnectionToTree = (currentNode: ElectricalNode, nodeId: string, targetId: string): ElectricalNode => {
-    if (currentNode.id === nodeId) {
-        const currentExtras = currentNode.extraConnections || [];
-        if (currentExtras.includes(targetId)) return currentNode;
-        return { ...currentNode, extraConnections: [...currentExtras, targetId] };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => addExtraConnectionToTree(child, nodeId, targetId)) };
-  };
-
-  const removeExtraConnectionFromTree = (currentNode: ElectricalNode, targetIdToRemove: string): ElectricalNode => {
-      let newNode = { ...currentNode };
-      if (newNode.extraConnections && newNode.extraConnections.includes(targetIdToRemove)) {
-          newNode.extraConnections = newNode.extraConnections.filter(id => id !== targetIdToRemove);
-      }
-      newNode.children = newNode.children.map(child => removeExtraConnectionFromTree(child, targetIdToRemove));
-      return newNode;
-  };
-
-  const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): ElectricalNode => {
-     const isDirectChild = currentNode.children.some(child => child.id === nodeIdToDelete);
-     if (isDirectChild) {
-         return {
-             ...currentNode,
-             children: currentNode.children.filter(child => child.id !== nodeIdToDelete)
-         };
-     }
-     return {
-         ...currentNode,
-         children: currentNode.children.map(child => deleteNodeInTree(child, nodeIdToDelete))
-     };
-  };
-
-  // --- Copy & Paste Logic ---
-  const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
-      const newId = generateId(String(node.type));
-      return {
-          ...node,
-          id: newId,
-          children: node.children.map(child => cloneNodeTree(child)),
-          extraConnections: [] // Clear external connections for clean copy
-      };
-  };
+  }, [activeProjectId, activePageId]);
 
   const handleCopy = useCallback(() => {
       if (selectedNode) {
+          // IMPORTANT: Lookup node in the live state tree to avoid circular references from D3
           const freshNode = findNode(activePage.items, selectedNode.id);
           if (freshNode) {
               try {
+                  // JSON parse/stringify to ensure no non-serializable properties (like D3 refs) are copied
                   const copy = JSON.parse(JSON.stringify(freshNode));
                   setClipboard(copy);
               } catch (e) {
@@ -250,18 +252,21 @@ export default function App() {
       if (!clipboard) return;
       saveToHistory();
       
+      // Recursive clone to generate fresh IDs and strip extra connections
       const newNode = cloneNodeTree(clipboard);
       newNode.name = `${newNode.name} (Copy)`;
 
       updatePage((page) => {
           if (selectedNode) {
+              // Paste as child of selected node
               const items = page.items.map(root => addNodeToTree(root, selectedNode.id, newNode));
               return { ...page, items };
           } else {
+              // Paste as independent node
               return { ...page, items: [...page.items, newNode] };
           }
       });
-  }, [clipboard, selectedNode, saveToHistory]); 
+  }, [clipboard, selectedNode, saveToHistory, updatePage]); 
 
   // --- Atomic Bulk Delete ---
   const executeBulkDelete = (idsToDelete: Set<string>) => {
@@ -322,8 +327,52 @@ export default function App() {
   const handleDeleteNodeClick = useCallback((node?: ElectricalNode) => {
       const nodeToDelete = node || selectedNode;
       if (!nodeToDelete) return;
-      requestConfirmation(t.dialogs.deleteNodeTitle, t.dialogs.deleteNode, () => executeDeleteNode(nodeToDelete));
-  }, [selectedNode, t]);
+      requestConfirmation(`${t.dialogs.deleteNodeTitle}`, `${t.dialogs.deleteNode}`, () => executeDeleteNode(nodeToDelete));
+  }, [selectedNode, t, updatePage, saveToHistory]);
+
+  const handleDisconnectLink = () => {
+      if (!selectedNode || !selectedLinkParentId) return;
+      saveToHistory();
+      
+      updatePage((page) => {
+          const childId = selectedNode.id;
+          const parentId = selectedLinkParentId;
+
+          // 1. Check if it is an EXTRA connection
+          const child = findNode(page.items, childId);
+          if (child && child.extraConnections?.includes(parentId)) {
+              const removeExtra = (n: ElectricalNode): ElectricalNode => {
+                  if (n.id === childId) {
+                      return { ...n, extraConnections: n.extraConnections?.filter(id => id !== parentId) };
+                  }
+                  return { ...n, children: n.children.map(removeExtra) };
+              };
+              return { ...page, items: page.items.map(removeExtra) };
+          }
+
+          // 2. If not extra, it's a PRIMARY parent-child relationship
+          const freshChild = findNode(page.items, childId);
+          if (!freshChild) return page;
+
+          // Remove from current location in tree
+          const newItemsWithRemoval = page.items.map(root => {
+             const remove = (n: ElectricalNode): ElectricalNode => {
+                 if (n.id === parentId) {
+                     return { ...n, children: n.children.filter(c => c.id !== childId) };
+                 }
+                 return { ...n, children: n.children.map(remove) };
+             };
+             return remove(root);
+          });
+
+          // Add as new root (independent)
+          return { ...page, items: [...newItemsWithRemoval, freshChild] };
+      });
+
+      setSelectedNode(null);
+      setSelectedLinkParentId(null);
+      setSelectionMode('node');
+  };
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -344,11 +393,11 @@ export default function App() {
           
           if (e.key === 'Delete' || e.key === 'Backspace') {
              if (multiSelection.size > 0) {
-                 if(window.confirm(t.dialogs.deleteNode)) { 
+                 if(window.confirm(`${t.dialogs.deleteNode}`)) { 
                      executeBulkDelete(multiSelection);
                  }
              } else if (selectedNode) {
-                 if(window.confirm(t.dialogs.deleteNode)) {
+                 if(window.confirm(`${t.dialogs.deleteNode}`)) {
                     executeDeleteNode(selectedNode);
                  }
              }
@@ -376,7 +425,20 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNode, multiSelection, clipboard, activeProjectId, activePageId, handleUndo, handleRedo, handleCopy, handlePaste, t]); 
+  }, [
+      selectedNode, 
+      multiSelection, 
+      clipboard, 
+      activeProjectId, 
+      activePageId, 
+      handleUndo, 
+      handleRedo, 
+      handleCopy, 
+      handlePaste, 
+      t, 
+      updatePage, // Ensure updatePage is included
+      saveToHistory
+  ]); 
 
   useEffect(() => {
       setSelectedNode(null);
@@ -453,7 +515,7 @@ export default function App() {
           else {
               if (targetChildNode.extraConnections?.includes(parentId)) return page;
               if (targetChildNode.children.some(c => c.id === parentId)) {
-                  alert(t.dialogs.cycle);
+                  alert(`${t.dialogs.cycle}`);
                   return page;
               }
               const items = page.items.map(root => addExtraConnectionToTree(root, childId, parentId));
@@ -498,14 +560,18 @@ export default function App() {
     }
   };
 
-  const handleLinkClick = (targetNode: ElectricalNode) => {
-      setSelectedNode(targetNode);
-      setSelectionMode('link');
-      setMultiSelection(new Set());
+  const handleLinkClick = (sourceId: string, targetId: string) => {
+      const targetNode = findNode(activePage.items, targetId);
+      if (targetNode) {
+          setSelectedNode(targetNode);
+          setSelectedLinkParentId(sourceId); // Track source for disconnection
+          setSelectionMode('link');
+          setMultiSelection(new Set());
+      }
   };
 
   const handleDetachNode = (nodeId: string) => {
-      if(confirm(t.dialogs.detach)) {
+      if(confirm(`${t.dialogs.detach}`)) {
           saveToHistory();
           updatePage((page) => {
              const node = findNode(page.items, nodeId);
@@ -546,7 +612,7 @@ export default function App() {
           case ComponentType.LOAD: desc = t.defaultDesc.load; break;
       }
       const newNode: ElectricalNode = {
-        id: generateId(String(type).toLowerCase()),
+        id: generateId(`${type}`.toLowerCase()),
         name: name,
         type: type,
         description: desc,
@@ -576,7 +642,7 @@ export default function App() {
             }
         }
         const newNode: ElectricalNode = {
-            id: generateId(String(data.type)),
+            id: generateId(`${data.type}`),
             name: data.name || data.type,
             type: data.type,
             componentNumber: data.componentNumber,
@@ -623,7 +689,7 @@ export default function App() {
       updatePage((page) => {
           const newNode: ElectricalNode = {
               ...node,
-              id: generateId(String(node.type)),
+              id: generateId(`${node.type}`),
               name: `${node.name} Copy`,
               children: [], 
               extraConnections: [],
@@ -739,7 +805,7 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
-        alert(t.dialogs.diagramNotFound);
+        alert(`${t.dialogs.diagramNotFound}`);
         return;
     }
     setShowAnalysis(true);
@@ -948,9 +1014,9 @@ export default function App() {
                 }).filter(Boolean) as Project[];
                 if(restoredProjects.length > 0) {
                     setProjects(prev => [...prev, ...restoredProjects]);
-                    alert(t.dialogs.restoreSuccess);
+                    alert(`${t.dialogs.restoreSuccess}`);
                 } else {
-                    alert(t.dialogs.importError);
+                    alert(`${t.dialogs.importError}`);
                 }
             } 
             else {
@@ -972,11 +1038,11 @@ export default function App() {
                     setActiveProjectId(importedData.id);
                     setActivePageId(importedData.pages[0].id);
                 } else {
-                    alert(t.dialogs.importError);
+                    alert(`${t.dialogs.importError}`);
                 }
             }
-        } catch (error) {
-            alert(t.dialogs.importError);
+        } catch (error: any) {
+            alert(`${t.dialogs.importError}`);
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -1020,7 +1086,7 @@ export default function App() {
   };
 
   const handleDeletePageClick = (projectId: string, pageId: string) => {
-      requestConfirmation(t.dialogs.deletePageTitle, t.dialogs.deletePage, () => deletePage(projectId, pageId));
+      requestConfirmation(`${t.dialogs.deletePageTitle}`, `${t.dialogs.deletePage}`, () => deletePage(projectId, pageId));
   }
 
   const deleteProject = (projId: string) => {
@@ -1035,7 +1101,7 @@ export default function App() {
   };
 
   const handleDeleteProjectClick = (projId: string) => {
-      requestConfirmation(t.dialogs.deleteProjectTitle, t.dialogs.deleteProject, () => deleteProject(projId));
+      requestConfirmation(`${t.dialogs.deleteProjectTitle}`, `${t.dialogs.deleteProject}`, () => deleteProject(projId));
   }
 
   const startEditing = (id: string, currentName: string) => {
@@ -1068,7 +1134,7 @@ export default function App() {
   };
 
   const handleReset = () => {
-      if(confirm(t.dialogs.reset)) {
+      if(confirm(`${t.dialogs.reset}`)) {
           saveToHistory();
           setProjects([DEFAULT_PROJECT]);
           setActiveProjectId(DEFAULT_PROJECT.id);
@@ -1323,6 +1389,7 @@ export default function App() {
                     connectionSourceId={connectionSource?.id || null}
                     isPrintMode={isPrintMode}
                     activeProject={activeProject}
+                    onDisconnectLink={handleDisconnectLink}
                     t={t}
                     language={language}
                     theme={theme}
@@ -1350,7 +1417,7 @@ export default function App() {
                     onEditConnection={updateNodeConnectionStyle}
                     onDelete={() => {
                         if (multiSelection.size > 0) {
-                            if(confirm(t.dialogs.deleteNode)) {
+                            if(confirm(`${t.dialogs.deleteNode}`)) {
                                 executeBulkDelete(multiSelection);
                             }
                         } else if (selectedNode) {
@@ -1361,6 +1428,7 @@ export default function App() {
                     onDetach={handleDetachNode}
                     onStartConnection={handleStartConnection}
                     onNavigate={handleNavigateToNode}
+                    onDisconnectLink={handleDisconnectLink}
                     t={t}
                 />
             </div>

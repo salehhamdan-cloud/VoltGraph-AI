@@ -17,6 +17,7 @@ interface InputPanelProps {
   onDetach?: (nodeId: string) => void;
   onStartConnection?: (nodeId: string) => void;
   onNavigate?: (nodeId: string) => void;
+  onDisconnectLink?: () => void; // New prop
   t: any;
 }
 
@@ -34,6 +35,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     onDetach,
     onStartConnection,
     onNavigate,
+    onDisconnectLink,
     t
 }) => {
   const [activeTab, setActiveTab] = useState<'add' | 'edit'>('add');
@@ -339,6 +341,15 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                   <div className="pt-2 text-xs text-slate-500 italic border-t border-slate-700 mt-2">
                       Styling the connection to: <strong>{selectedNode.name}</strong>
                   </div>
+
+                  <button 
+                    type="button"
+                    onClick={onDisconnectLink}
+                    className="w-full py-2 mt-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 border border-red-900/50 rounded transition-colors flex items-center justify-center gap-2 text-sm"
+                  >
+                    <span className="material-icons-round text-sm">link_off</span>
+                    {t.inputPanel.disconnect || "Disconnect Link"}
+                  </button>
               </div>
           </div>
       );

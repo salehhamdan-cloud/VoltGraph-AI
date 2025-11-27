@@ -14,7 +14,6 @@ type Language = 'en' | 'he' | 'ar';
 type Theme = 'light' | 'dark';
 
 export default function App() {
-  // Initialize projects from LocalStorage if available
   const [projects, setProjects] = useState<Project[]>(() => {
     try {
       const savedData = localStorage.getItem('voltgraph_data');
@@ -48,6 +47,9 @@ export default function App() {
   const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set());
   const [selectionMode, setSelectionMode] = useState<'node' | 'link'>('node');
   const [clipboard, setClipboard] = useState<ElectricalNode | null>(null);
+  
+  // New State for tracking link source to enable disconnection
+  const [selectedLinkParentId, setSelectedLinkParentId] = useState<string | null>(null);
 
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showAnalysis, setShowAnalysis] = useState(false);
@@ -224,7 +226,7 @@ export default function App() {
 
   // --- Copy & Paste Logic ---
   const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
-      const newId = generateId(String(node.type));
+      const newId = generateId(`${node.type}`);
       return {
           ...node,
           id: newId,
@@ -235,8 +237,6 @@ export default function App() {
 
   const handleCopy = useCallback(() => {
       if (selectedNode) {
-          // IMPORTANT: Find the node in the actual state tree. 
-          // selectedNode might be a D3-wrapped object or stale reference which creates circular JSON errors.
           const freshNode = findNode(activePage.items, selectedNode.id);
           if (freshNode) {
               try {
@@ -325,8 +325,63 @@ export default function App() {
   const handleDeleteNodeClick = useCallback((node?: ElectricalNode) => {
       const nodeToDelete = node || selectedNode;
       if (!nodeToDelete) return;
-      requestConfirmation(t.dialogs.deleteNodeTitle, t.dialogs.deleteNode, () => executeDeleteNode(nodeToDelete));
+      requestConfirmation(`${t.dialogs.deleteNodeTitle}`, `${t.dialogs.deleteNode}`, () => executeDeleteNode(nodeToDelete));
   }, [selectedNode, t]);
+
+  // --- Disconnect Link Logic (Defined before usage) ---
+  const handleDisconnectLink = () => {
+      if (!selectedNode || !selectedLinkParentId) return;
+      saveToHistory();
+      
+      updatePage((page) => {
+          const childId = selectedNode.id;
+          const parentId = selectedLinkParentId;
+
+          // 1. Check if it is an EXTRA connection
+          const child = findNode(page.items, childId);
+          if (child && child.extraConnections?.includes(parentId)) {
+              const removeExtra = (n: ElectricalNode): ElectricalNode => {
+                  if (n.id === childId) {
+                      return { ...n, extraConnections: n.extraConnections?.filter(id => id !== parentId) };
+                  }
+                  return { ...n, children: n.children.map(removeExtra) };
+              };
+              return { ...page, items: page.items.map(removeExtra) };
+          }
+
+          // 2. If not extra, it's a PRIMARY parent-child relationship
+          const freshChild = findNode(page.items, childId);
+          if (!freshChild) return page;
+
+          // Remove from current location in tree
+          const newItemsWithRemoval = page.items.map(root => {
+             const remove = (n: ElectricalNode): ElectricalNode => {
+                 if (n.id === parentId) {
+                     return { ...n, children: n.children.filter(c => c.id !== childId) };
+                 }
+                 return { ...n, children: n.children.map(remove) };
+             };
+             return remove(root);
+          });
+
+          // Add as new root (independent)
+          return { ...page, items: [...newItemsWithRemoval, freshChild] };
+      });
+
+      setSelectedNode(null);
+      setSelectedLinkParentId(null);
+      setSelectionMode('node');
+  };
+
+  const handleLinkClick = (sourceId: string, targetId: string) => {
+      const targetNode = findNode(activePage.items, targetId);
+      if (targetNode) {
+          setSelectedNode(targetNode);
+          setSelectedLinkParentId(sourceId); // Track source for disconnection
+          setSelectionMode('link');
+          setMultiSelection(new Set());
+      }
+  };
 
   // --- Keyboard Shortcuts ---
   useEffect(() => {
@@ -336,7 +391,6 @@ export default function App() {
       const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
 
       if (!isInput) {
-          // Undo / Redo
           if (isCtrl && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             e.shiftKey ? handleRedo() : handleUndo();
@@ -346,32 +400,28 @@ export default function App() {
               handleRedo();
           }
           
-          // Delete
           if (e.key === 'Delete' || e.key === 'Backspace') {
              if (multiSelection.size > 0) {
-                 if(window.confirm(t.dialogs.deleteNode)) { 
+                 if(window.confirm(`${t.dialogs.deleteNode}`)) { 
                      executeBulkDelete(multiSelection);
                  }
              } else if (selectedNode) {
-                 if(window.confirm(t.dialogs.deleteNode)) {
+                 if(window.confirm(`${t.dialogs.deleteNode}`)) {
                     executeDeleteNode(selectedNode);
                  }
              }
           }
 
-          // Copy
           if (isCtrl && e.key.toLowerCase() === 'c') {
               e.preventDefault();
               handleCopy();
           }
           
-          // Paste
           if (isCtrl && e.key.toLowerCase() === 'v') {
               e.preventDefault();
               handlePaste();
           }
 
-          // Escape
           if (e.key === 'Escape') {
               e.preventDefault();
               setSelectionMode('node');
@@ -461,7 +511,7 @@ export default function App() {
           else {
               if (targetChildNode.extraConnections?.includes(parentId)) return page;
               if (targetChildNode.children.some(c => c.id === parentId)) {
-                  alert(t.dialogs.cycle);
+                  alert(`${t.dialogs.cycle}`);
                   return page;
               }
               const items = page.items.map(root => addExtraConnectionToTree(root, childId, parentId));
@@ -506,14 +556,18 @@ export default function App() {
     }
   };
 
-  const handleLinkClick = (targetNode: ElectricalNode) => {
-      setSelectedNode(targetNode);
-      setSelectionMode('link');
-      setMultiSelection(new Set());
+  const handleLinkClick = (sourceId: string, targetId: string) => {
+      const targetNode = findNode(activePage.items, targetId);
+      if (targetNode) {
+          setSelectedNode(targetNode);
+          setSelectedLinkParentId(sourceId); // Track source for disconnection
+          setSelectionMode('link');
+          setMultiSelection(new Set());
+      }
   };
 
   const handleDetachNode = (nodeId: string) => {
-      if(confirm(t.dialogs.detach)) {
+      if(confirm(`${t.dialogs.detach}`)) {
           saveToHistory();
           updatePage((page) => {
              const node = findNode(page.items, nodeId);
@@ -554,7 +608,7 @@ export default function App() {
           case ComponentType.LOAD: desc = t.defaultDesc.load; break;
       }
       const newNode: ElectricalNode = {
-        id: generateId(String(type).toLowerCase()),
+        id: generateId(`${type}`.toLowerCase()),
         name: name,
         type: type,
         description: desc,
@@ -584,7 +638,7 @@ export default function App() {
             }
         }
         const newNode: ElectricalNode = {
-            id: generateId(String(data.type)),
+            id: generateId(`${data.type}`),
             name: data.name || data.type,
             type: data.type,
             componentNumber: data.componentNumber,
@@ -631,7 +685,7 @@ export default function App() {
       updatePage((page) => {
           const newNode: ElectricalNode = {
               ...node,
-              id: generateId(String(node.type)),
+              id: generateId(`${node.type}`),
               name: `${node.name} Copy`,
               children: [], 
               extraConnections: [],
@@ -747,7 +801,7 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
-        alert(t.dialogs.diagramNotFound);
+        alert(`${t.dialogs.diagramNotFound}`);
         return;
     }
     setShowAnalysis(true);
@@ -956,9 +1010,9 @@ export default function App() {
                 }).filter(Boolean) as Project[];
                 if(restoredProjects.length > 0) {
                     setProjects(prev => [...prev, ...restoredProjects]);
-                    alert(t.dialogs.restoreSuccess);
+                    alert(`${t.dialogs.restoreSuccess}`);
                 } else {
-                    alert(t.dialogs.importError);
+                    alert(`${t.dialogs.importError}`);
                 }
             } 
             else {
@@ -980,11 +1034,11 @@ export default function App() {
                     setActiveProjectId(importedData.id);
                     setActivePageId(importedData.pages[0].id);
                 } else {
-                    alert(t.dialogs.importError);
+                    alert(`${t.dialogs.importError}`);
                 }
             }
-        } catch (error) {
-            alert(t.dialogs.importError);
+        } catch (error: any) {
+            alert(`${t.dialogs.importError}`);
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
@@ -1028,7 +1082,7 @@ export default function App() {
   };
 
   const handleDeletePageClick = (projectId: string, pageId: string) => {
-      requestConfirmation(t.dialogs.deletePageTitle, t.dialogs.deletePage, () => deletePage(projectId, pageId));
+      requestConfirmation(`${t.dialogs.deletePageTitle}`, `${t.dialogs.deletePage}`, () => deletePage(projectId, pageId));
   }
 
   const deleteProject = (projId: string) => {
@@ -1043,7 +1097,7 @@ export default function App() {
   };
 
   const handleDeleteProjectClick = (projId: string) => {
-      requestConfirmation(t.dialogs.deleteProjectTitle, t.dialogs.deleteProject, () => deleteProject(projId));
+      requestConfirmation(`${t.dialogs.deleteProjectTitle}`, `${t.dialogs.deleteProject}`, () => deleteProject(projId));
   }
 
   const startEditing = (id: string, currentName: string) => {
@@ -1076,7 +1130,7 @@ export default function App() {
   };
 
   const handleReset = () => {
-      if(confirm(t.dialogs.reset)) {
+      if(confirm(`${t.dialogs.reset}`)) {
           saveToHistory();
           setProjects([DEFAULT_PROJECT]);
           setActiveProjectId(DEFAULT_PROJECT.id);
@@ -1331,6 +1385,7 @@ export default function App() {
                     connectionSourceId={connectionSource?.id || null}
                     isPrintMode={isPrintMode}
                     activeProject={activeProject}
+                    onDisconnectLink={handleDisconnectLink}
                     t={t}
                     language={language}
                     theme={theme}
@@ -1358,7 +1413,7 @@ export default function App() {
                     onEditConnection={updateNodeConnectionStyle}
                     onDelete={() => {
                         if (multiSelection.size > 0) {
-                            if(confirm(t.dialogs.deleteNode)) {
+                            if(confirm(`${t.dialogs.deleteNode}`)) {
                                 executeBulkDelete(multiSelection);
                             }
                         } else if (selectedNode) {
@@ -1369,6 +1424,7 @@ export default function App() {
                     onDetach={handleDetachNode}
                     onStartConnection={handleStartConnection}
                     onNavigate={handleNavigateToNode}
+                    onDisconnectLink={handleDisconnectLink}
                     t={t}
                 />
             </div>

@@ -7,7 +7,7 @@ import { COMPONENT_CONFIG, ICON_PATHS } from '../constants';
 interface DiagramProps {
   data: ElectricalNode[];
   onNodeClick: (node: ElectricalNode, isMulti: boolean) => void;
-  onLinkClick: (targetNode: ElectricalNode) => void;
+  onLinkClick: (sourceId: string, targetId: string) => void;
   onDuplicateChild: (node: ElectricalNode) => void;
   onDeleteNode: (node: ElectricalNode) => void;
   onToggleCollapse: (node: ElectricalNode) => void;
@@ -25,6 +25,7 @@ interface DiagramProps {
   connectionSourceId?: string | null;
   isPrintMode?: boolean;
   activeProject?: Project;
+  onDisconnectLink?: () => void;
   t: any;
   language: string;
   theme: 'light' | 'dark';
@@ -33,6 +34,8 @@ interface DiagramProps {
 interface ExtendedHierarchyNode extends d3.HierarchyPointNode<ElectricalNode> {
   width: number;
   height: number;
+  x: number;
+  y: number;
   __isDragging?: boolean;
   __totalDx?: number;
   __totalDy?: number;
@@ -65,6 +68,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     connectionSourceId = null,
     isPrintMode = false,
     activeProject,
+    onDisconnectLink,
     t,
     language,
     theme
@@ -151,7 +155,6 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const { width, height } = dimensions;
     
-    // Empty State
     if (!data || data.length === 0) {
          const g = svg.append("g")
              .attr("transform", `translate(${width/2},${height/2})`);
@@ -212,7 +215,6 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const margin = { top: 100, right: 150, bottom: 100, left: 150 }; 
     
-    // Markers
     ['arrow', 'circle', 'diamond'].forEach(type => {
         const markerStart = defs.append('marker')
             .attr('id', `${type}-start`)
@@ -282,7 +284,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     });
 
-    // --- Dynamic Sizing ---
     const getNodeSize = (d: d3.HierarchyNode<ElectricalNode>) => {
         if (d.data.id === 'virtual-root') return { w: 1, h: 1 };
 
@@ -423,7 +424,6 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const linksGroup = g.append('g').attr('class', 'links');
 
-    // Subtree Drag Behavior
     const drag = d3.drag<SVGGElement, ExtendedHierarchyNode>()
         .on("start", function(event, d) {
              const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
@@ -445,8 +445,6 @@ export const Diagram: React.FC<DiagramProps> = ({
              if (d.__isDragging) {
                  const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
                  descendants.forEach((desc) => {
-                     // Simplified drag logic: actually event.dx is accumulative. 
-                     // Correct logic using cached positions:
                      const currentX = (desc.data.manualX || 0) + event.dx;
                      const currentY = (desc.data.manualY || 0) + event.dy;
                      desc.data.manualX = currentX;
@@ -531,7 +529,63 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('data-target-id', (d: any) => d.target.data.id)
         .attr('d', d => linkGenerator(d.source, d.target))
         .attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 15).style('cursor', 'pointer')
-        .on('click', (e, d) => { e.stopPropagation(); onLinkClick(d.target.data); });
+        .on('click', (e, d) => { 
+            e.stopPropagation(); 
+            onLinkClick(d.source.data.id, d.target.data.id); 
+        });
+
+    // --- Visual Link Disconnect Icon ---
+    if (selectedLinkId) {
+        const selectedLink = linksToRender.find(d => d.target.data.id === selectedLinkId) || extraLinksToRender.find(d => d.target.data.id === selectedLinkId);
+        
+        if (selectedLink) {
+             const sXOffset = selectedLink.source.data.manualX || 0;
+             const sYOffset = selectedLink.source.data.manualY || 0;
+             const tXOffset = selectedLink.target.data.manualX || 0;
+             const tYOffset = selectedLink.target.data.manualY || 0;
+             
+             let srcX, srcY, tgtX, tgtY;
+             
+             if (orientation === 'horizontal') {
+                 srcX = selectedLink.source.y + selectedLink.source.width + sXOffset;
+                 srcY = selectedLink.source.x + sYOffset;
+                 tgtX = selectedLink.target.y + tXOffset;
+                 tgtY = selectedLink.target.x + tYOffset;
+             } else {
+                 srcX = selectedLink.source.x + sXOffset;
+                 srcY = selectedLink.source.y + selectedLink.source.height + sYOffset;
+                 tgtX = selectedLink.target.x + tXOffset;
+                 tgtY = selectedLink.target.y + tYOffset;
+             }
+
+             const midX = (srcX + tgtX) / 2;
+             const midY = (srcY + tgtY) / 2;
+             
+             if (!isNaN(midX) && !isNaN(midY)) {
+                 const btnGroup = linksGroup.append('g')
+                    .attr('class', 'link-delete-btn')
+                    .attr('transform', `translate(${midX}, ${midY})`)
+                    .style('cursor', 'pointer')
+                    .on('click', (e) => {
+                        e.stopPropagation();
+                        if (onDisconnectLink) onDisconnectLink();
+                    });
+                 
+                 btnGroup.append('circle')
+                    .attr('r', 10)
+                    .attr('fill', '#ef4444')
+                    .attr('stroke', '#ffffff')
+                    .attr('stroke-width', 2);
+                 
+                 btnGroup.append('path')
+                    .attr('d', 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z') // Close icon
+                    .attr('transform', 'translate(-12, -12) scale(1)') 
+                    .attr('fill', 'white');
+                 
+                 btnGroup.append('title').text(t.inputPanel.disconnect);
+             }
+        }
+    }
 
     const nodes = g.selectAll('g.node')
       .data(nodesToRender)
@@ -829,11 +883,14 @@ export const Diagram: React.FC<DiagramProps> = ({
     let legX, legY;
 
     if (isPrintMode && activeProject) {
+        // Stack above title block, aligned to the right of the layout
         const blockH = 120;
-        const xStart = maxX + 50; // Matches Title Block start
+        const xStart = maxX + 50;
         const yStart = maxY + 50 - blockH;
         
-        // Align Right Edge of Legend with Right Edge of Title Block
+        // Align left edge of legend to (TitleBlockRight - LegendWidth)
+        // TitleBlock is [xStart, xStart+400]
+        // We want [xStart + 400 - 160, ...]
         legX = xStart + 400 - legendW;
         legY = yStart - legendH - 10; 
     } else {
@@ -862,6 +919,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('font-weight', 'bold')
         .attr('fill', textColor)
         .attr('font-size', '12px')
+        .style('direction', 'ltr') 
         .text(t.legend.title);
 
     const types = Object.values(ComponentType);
@@ -891,7 +949,6 @@ export const Diagram: React.FC<DiagramProps> = ({
             .style('direction', 'ltr') 
             .text(t.componentTypes[type]);
     });
-
 
   }, [data, dimensions, onNodeClick, onLinkClick, selectedNodeId, selectedLinkId, orientation, searchMatches, isConnectMode, connectionSourceId, t, language, theme, onBackgroundClick, multiSelection, isPrintMode, activeProject]);
 
