@@ -5,5 +5,5 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   // Use relative base path to ensure it works in both preview (root) and GitHub Pages (subdirectory)
-  base: './', 
+  base: '/VoltGraph-AI/', 
 })
