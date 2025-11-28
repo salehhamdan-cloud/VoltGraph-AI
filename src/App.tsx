@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
@@ -84,7 +83,7 @@ const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): 
 };
 
 const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
-    const newId = generateId(`${node.type}`);
+    const newId = generateId(String(node.type));
     return {
         ...node,
         id: newId,
@@ -111,7 +110,7 @@ export default function App() {
       }));
       
       return loadedProjects;
-    } catch (e) {
+    } catch (e: any) {
       console.error("Failed to load data from local storage", e);
       return [DEFAULT_PROJECT];
     }
@@ -139,6 +138,7 @@ export default function App() {
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [printSettingsFocus, setPrintSettingsFocus] = useState<string | undefined>(undefined);
+  const [isCleanView, setIsCleanView] = useState(false);
   
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<Theme>('light');
@@ -257,7 +257,7 @@ export default function App() {
                   // JSON parse/stringify to ensure no non-serializable properties (like D3 refs) are copied
                   const copy = JSON.parse(JSON.stringify(freshNode));
                   setClipboard(copy);
-              } catch (e) {
+              } catch (e: any) {
                   console.error("Copy failed:", e);
               }
           }
@@ -268,14 +268,16 @@ export default function App() {
       if (!clipboard) return;
       saveToHistory();
       
+      const nodeToClone = clipboard as ElectricalNode;
       // Recursive clone to generate fresh IDs and strip extra connections
-      const newNode = cloneNodeTree(clipboard);
+      const newNode = cloneNodeTree(nodeToClone);
       newNode.name = `${newNode.name} (Copy)`;
 
       updatePage((page) => {
           if (selectedNode) {
+              const parentNode = selectedNode as ElectricalNode;
               // Paste as child of selected node
-              const items = page.items.map(root => addNodeToTree(root, selectedNode.id, newNode));
+              const items = page.items.map(root => addNodeToTree(root, parentNode.id, newNode));
               return { ...page, items };
           } else {
               // Paste as independent node
@@ -438,11 +440,15 @@ export default function App() {
 
           if (e.key === 'Escape') {
               e.preventDefault();
-              setSelectionMode('node');
-              setSelectedNode(null);
-              setMultiSelection(new Set());
-              setIsConnectMode(false);
-              setConnectionSource(null);
+              if (isCleanView) {
+                  setIsCleanView(false);
+              } else {
+                  setSelectionMode('node');
+                  setSelectedNode(null);
+                  setMultiSelection(new Set());
+                  setIsConnectMode(false);
+                  setConnectionSource(null);
+              }
           }
       }
     };
@@ -459,8 +465,9 @@ export default function App() {
       handleCopy, 
       handlePaste, 
       t, 
-      updatePage,
-      saveToHistory
+      updatePage, 
+      saveToHistory,
+      isCleanView
   ]); 
 
   useEffect(() => {
@@ -477,7 +484,7 @@ export default function App() {
       try {
         localStorage.setItem('voltgraph_data', JSON.stringify(projects));
         setSaveStatus('saved');
-      } catch (e) {
+      } catch (e: any) {
         setSaveStatus('unsaved');
       }
     }, 1000); 
@@ -618,7 +625,7 @@ export default function App() {
   const handleAddIndependentNode = (type: ComponentType) => {
       saveToHistory();
       setShowAddIndependentMenu(false);
-      let name = t.componentTypes[type];
+      let name = t.componentTypes[type] as string;
       let desc = 'Independent Node';
       switch(type) {
           case ComponentType.SYSTEM_ROOT: desc = t.defaultDesc.grid; break;
@@ -657,7 +664,7 @@ export default function App() {
             }
         }
         const newNode: ElectricalNode = {
-            id: generateId(`${data.type}`),
+            id: generateId(String(data.type)),
             name: data.name || data.type,
             type: data.type,
             componentNumber: data.componentNumber,
@@ -671,6 +678,8 @@ export default function App() {
             meterNumber: data.meterNumber,
             hasGeneratorConnection: data.hasGeneratorConnection,
             generatorName: data.generatorName,
+            shape: data.shape,
+            customImage: data.customImage,
             children: [],
             extraConnections: [],
             connectionStyle: { ...DEFAULT_CONNECTION_STYLE, strokeColor: connectionColor },
@@ -704,7 +713,7 @@ export default function App() {
       updatePage((page) => {
           const newNode: ElectricalNode = {
               ...node,
-              id: generateId(`${node.type}`),
+              id: generateId(String(node.type)),
               name: `${node.name} Copy`,
               children: [], 
               extraConnections: [],
@@ -733,7 +742,9 @@ export default function App() {
             hasMeter: data.hasMeter,
             meterNumber: data.meterNumber,
             hasGeneratorConnection: data.hasGeneratorConnection,
-            generatorName: data.generatorName
+            generatorName: data.generatorName,
+            shape: data.shape,
+            customImage: data.customImage
         }));
         const newNode = findNode(items, selectedNode.id);
         if (newNode) setSelectedNode(newNode);
@@ -820,7 +831,9 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
-        alert(`${t.dialogs.diagramNotFound}`);
+        // Ensure message is a string to avoid type errors
+        const msg = (t.dialogs && t.dialogs.diagramNotFound) ? String(t.dialogs.diagramNotFound) : "Diagram not found.";
+        alert(msg);
         return;
     }
     setShowAnalysis(true);
@@ -829,8 +842,11 @@ export default function App() {
     try {
       const result = await analyzeCircuit(activePage.items);
       setAnalysisResult(result);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      // Explicitly handle unknown error type
+      const error = err as any;
+      const message: string = error instanceof Error ? error.message : String(error);
+      console.error(message);
     } finally {
       setIsAnalyzing(false);
     }
@@ -930,7 +946,11 @@ export default function App() {
               const headers = columns.map(k => headerMap[k]);
               const csvContent = [
                   headers.join(','),
-                  ...rows.map(row => headers.map(header => `"${String(row[header] || '').replace(/"/g, '""')}"`).join(','))
+                  ...rows.map(row => headers.map(header => {
+                      const val = row[header];
+                      const valStr = val !== undefined && val !== null ? String(val) : '';
+                      return `"${valStr.replace(/"/g, '""')}"`;
+                  }).join(','))
               ].join('\n');
               const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
               const url = URL.createObjectURL(blob);
@@ -1198,6 +1218,7 @@ export default function App() {
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isDark ? 'text-slate-200 bg-slate-900' : 'text-slate-800 bg-slate-50'} ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
+      {!isCleanView && (
       <nav className="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between sticky top-0 z-40 shadow-md">
         <div className="flex items-center gap-3">
              <button onClick={() => setShowProjectSidebar(!showProjectSidebar)} className="p-2 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors">
@@ -1302,6 +1323,14 @@ export default function App() {
             >
                 <span className="material-icons-round">picture_as_pdf</span>
             </button>
+            
+             <button 
+                onClick={() => setIsCleanView(true)} 
+                className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700"
+                title={t.cleanView}
+             >
+                <span className="material-icons-round">fullscreen</span>
+            </button>
 
              <button onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')} className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">
                 <span className="material-icons-round">{theme === 'light' ? 'dark_mode' : 'light_mode'}</span>
@@ -1334,9 +1363,11 @@ export default function App() {
             </button>
         </div>
       </nav>
+      )}
 
       <main className="flex-1 flex overflow-hidden relative">
-        {showProjectSidebar && (
+        {/* Sidebar - Hidden in Clean View */}
+        {showProjectSidebar && !isCleanView && (
             <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
                 <div className="p-4 border-b border-slate-800 flex items-center justify-between">
                     <h2 className="font-bold text-slate-300 text-sm uppercase tracking-wider">{t.projects}</h2>
@@ -1409,17 +1440,30 @@ export default function App() {
         )}
 
         <div className="flex-1 relative p-4 flex flex-col bg-slate-950/50 overflow-hidden">
-            <div className="mb-2 flex items-center justify-between">
-                 <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500">{t.active}:</span>
-                    <span className="text-sm font-medium text-slate-200">{activeProject.name} / {activePage.name}</span>
-                 </div>
-                 {isConnectMode && (
-                    <div className="bg-amber-900/40 border border-amber-700/50 px-3 py-1 rounded text-xs text-amber-300 animate-pulse font-bold">
-                        {connectionSource ? t.connectMode.target : t.connectMode.source}
-                    </div>
-                 )}
-            </div>
+            {/* Clean View Exit Button */}
+            {isCleanView && (
+                <button 
+                    onClick={() => setIsCleanView(false)}
+                    className="absolute top-4 right-4 z-50 px-4 py-2 bg-slate-800/80 backdrop-blur border border-slate-700 rounded-full text-white text-sm hover:bg-slate-700 transition-colors flex items-center gap-2 shadow-lg"
+                >
+                    <span className="material-icons-round text-base">fullscreen_exit</span>
+                    {t.exitCleanView}
+                </button>
+            )}
+
+            {!isCleanView && (
+                <div className="mb-2 flex items-center justify-between">
+                     <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">{t.active}:</span>
+                        <span className="text-sm font-medium text-slate-200">{activeProject.name} / {activePage.name}</span>
+                     </div>
+                     {isConnectMode && (
+                        <div className="bg-amber-900/40 border border-amber-700/50 px-3 py-1 rounded text-xs text-amber-300 animate-pulse font-bold">
+                            {connectionSource ? t.connectMode.target : t.connectMode.source}
+                        </div>
+                     )}
+                </div>
+            )}
             <div className={`flex-1 rounded-xl border shadow-xl relative overflow-hidden ${isConnectMode ? 'border-amber-600/50 shadow-amber-900/20' : 'border-slate-800'} ${theme === 'light' ? 'bg-white' : 'bg-slate-900'}`}>
                 <Diagram 
                     data={activePage.items} 
@@ -1451,76 +1495,79 @@ export default function App() {
             </div>
         </div>
 
-        <aside className="w-96 bg-slate-900 border-l border-slate-800 overflow-y-auto flex flex-col z-30 shadow-2xl">
-            {isPrintMode && !selectedNode ? (
-                <div className="flex flex-col h-full">
-                     <div className="p-4 border-b border-slate-800 bg-slate-800/30">
-                        <button 
-                            onClick={() => handleEditPrintSettings()}
-                            className="w-full py-2 px-4 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition-colors flex items-center justify-center gap-2 mb-2"
-                        >
-                            <span className="material-icons-round text-sm">edit</span>
-                            <span className="text-sm font-bold">{t.printSettings.title}</span>
-                        </button>
+        {/* Input/Settings Panel - Hidden in Clean View */}
+        {!isCleanView && (
+            <aside className="w-96 bg-slate-900 border-l border-slate-800 overflow-y-auto flex flex-col z-30 shadow-2xl">
+                {isPrintMode && !selectedNode ? (
+                    <div className="flex flex-col h-full">
+                         <div className="p-4 border-b border-slate-800 bg-slate-800/30">
+                            <button 
+                                onClick={() => handleEditPrintSettings()}
+                                className="w-full py-2 px-4 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition-colors flex items-center justify-center gap-2 mb-2"
+                            >
+                                <span className="material-icons-round text-sm">edit</span>
+                                <span className="text-sm font-bold">{t.printSettings.title}</span>
+                            </button>
+                        </div>
+                        <div className="p-4 flex-1 overflow-y-auto">
+                            <PrintSettingsPanel 
+                                key={activeProjectId}
+                                metadata={activeProject.printMetadata || DEFAULT_PRINT_METADATA}
+                                projectName={activeProject.name}
+                                onChange={handleUpdatePrintMetadata}
+                                onUpdateProjectName={handleUpdateProjectName}
+                                onClose={() => setIsPrintMode(false)}
+                                focusField={printSettingsFocus}
+                                t={t}
+                            />
+                        </div>
                     </div>
-                    <div className="p-4 flex-1 overflow-y-auto">
-                        <PrintSettingsPanel 
-                            key={activeProjectId}
-                            metadata={activeProject.printMetadata || DEFAULT_PRINT_METADATA}
-                            projectName={activeProject.name}
-                            onChange={handleUpdatePrintMetadata}
-                            onUpdateProjectName={handleUpdateProjectName}
-                            onClose={() => setIsPrintMode(false)}
-                            focusField={printSettingsFocus}
-                            t={t}
-                        />
-                    </div>
-                </div>
-            ) : (
-                <>
-                    <div className="p-4 border-b border-slate-800 bg-slate-800/30">
-                        <h2 className="font-bold text-slate-200 flex items-center gap-2">
-                            <span className="material-icons-round text-blue-400">tune</span>
-                            {t.propertiesActions}
-                        </h2>
-                    </div>
+                ) : (
+                    <>
+                        <div className="p-4 border-b border-slate-800 bg-slate-800/30">
+                            <h2 className="font-bold text-slate-200 flex items-center gap-2">
+                                <span className="material-icons-round text-blue-400">tune</span>
+                                {t.propertiesActions}
+                            </h2>
+                        </div>
 
-                    <div className="p-4 flex-1 overflow-y-auto">
-                        <InputPanel 
-                            selectedNode={selectedNode}
-                            selectionMode={selectionMode}
-                            multiSelectionCount={multiSelection.size}
-                            onAdd={handleAddNode}
-                            onAddIndependent={handleAddIndependentNode}
-                            onEdit={handleEditNode}
-                            onBulkEdit={handleBulkEdit}
-                            onEditConnection={updateNodeConnectionStyle}
-                            onDelete={() => {
-                                if (multiSelection.size > 0) {
-                                    if(confirm(`${t.dialogs.deleteNode}`)) {
-                                        executeBulkDelete(multiSelection);
+                        <div className="p-4 flex-1 overflow-y-auto">
+                            <InputPanel 
+                                selectedNode={selectedNode}
+                                selectionMode={selectionMode}
+                                multiSelectionCount={multiSelection.size}
+                                onAdd={handleAddNode}
+                                onAddIndependent={handleAddIndependentNode}
+                                onEdit={handleEditNode}
+                                onBulkEdit={handleBulkEdit}
+                                onEditConnection={updateNodeConnectionStyle}
+                                onDelete={() => {
+                                    if (multiSelection.size > 0) {
+                                        if(confirm(`${t.dialogs.deleteNode}`)) {
+                                            executeBulkDelete(multiSelection);
+                                        }
+                                    } else if (selectedNode) {
+                                        handleDeleteNodeClick(selectedNode);
                                     }
-                                } else if (selectedNode) {
-                                    handleDeleteNodeClick(selectedNode);
-                                }
-                            }}
-                            onCancel={() => { setSelectedNode(null); setMultiSelection(new Set()); setSelectionMode('node'); }}
-                            onDetach={handleDetachNode}
-                            onStartConnection={handleStartConnection}
-                            onNavigate={handleNavigateToNode}
-                            onDisconnectLink={handleDisconnectLink}
-                            t={t}
-                        />
-                    </div>
-                </>
-            )}
-            
-            <div className="p-4 border-t border-slate-800 text-center">
-                 <button onClick={handleReset} className="text-xs text-red-400 hover:text-red-300 hover:underline transition-colors">
-                    {t.resetDiagram}
-                </button>
-            </div>
-        </aside>
+                                }}
+                                onCancel={() => { setSelectedNode(null); setMultiSelection(new Set()); setSelectionMode('node'); }}
+                                onDetach={handleDetachNode}
+                                onStartConnection={handleStartConnection}
+                                onNavigate={handleNavigateToNode}
+                                onDisconnectLink={handleDisconnectLink}
+                                t={t}
+                            />
+                        </div>
+                    </>
+                )}
+                
+                <div className="p-4 border-t border-slate-800 text-center">
+                     <button onClick={handleReset} className="text-xs text-red-400 hover:text-red-300 hover:underline transition-colors">
+                        {t.resetDiagram}
+                    </button>
+                </div>
+            </aside>
+        )}
       </main>
 
       <AnalysisModal isOpen={showAnalysis} onClose={() => setShowAnalysis(false)} loading={isAnalyzing} result={analysisResult} t={t} />

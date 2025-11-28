@@ -15,7 +15,10 @@ export interface ConnectionStyle {
   lineStyle?: 'solid' | 'dashed' | 'dotted';
   startMarker?: 'none' | 'arrow' | 'circle' | 'diamond';
   endMarker?: 'none' | 'arrow' | 'circle' | 'diamond';
+  cableSize?: string; // Cable size text (e.g., "4x25mm")
 }
+
+export type NodeShape = 'rectangle' | 'circle' | 'square';
 
 export interface ElectricalNode {
   id: string;
@@ -30,6 +33,8 @@ export interface ElectricalNode {
   
   // Appearance
   customColor?: string;
+  shape?: NodeShape; // Visual shape: rectangle, circle, square
+  customImage?: string; // Base64 string for custom icon
 
   // Meter Property
   hasMeter?: boolean;
@@ -59,6 +64,8 @@ export interface NewNodeData {
   kva?: number;
   description?: string;
   customColor?: string;
+  shape?: NodeShape;
+  customImage?: string;
   hasMeter?: boolean;
   meterNumber?: string;
   hasGeneratorConnection?: boolean;

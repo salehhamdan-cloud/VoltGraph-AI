@@ -1,6 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
-import { ComponentType, NewNodeData, ElectricalNode, ConnectionStyle } from '../types';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { ComponentType, NewNodeData, ElectricalNode, ConnectionStyle, NodeShape } from '../types';
 import { COMMON_MODELS, COMPONENT_CONFIG, DEFAULT_CONNECTION_STYLE } from '../constants';
 
 interface InputPanelProps {
@@ -17,7 +18,7 @@ interface InputPanelProps {
   onDetach?: (nodeId: string) => void;
   onStartConnection?: (nodeId: string) => void;
   onNavigate?: (nodeId: string) => void;
-  onDisconnectLink?: () => void; // New prop
+  onDisconnectLink?: () => void; 
   t: any;
 }
 
@@ -50,6 +51,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     kva: undefined,
     description: '',
     customColor: undefined,
+    shape: 'rectangle',
+    customImage: undefined,
     hasMeter: false,
     meterNumber: '',
     hasGeneratorConnection: false,
@@ -57,6 +60,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   });
 
   const [connectionData, setConnectionData] = useState<ConnectionStyle>(DEFAULT_CONNECTION_STYLE);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (activeTab === 'edit' && selectedNode) {
@@ -70,6 +74,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             kva: selectedNode.kva,
             description: selectedNode.description || '',
             customColor: selectedNode.customColor,
+            shape: selectedNode.shape || 'rectangle',
+            customImage: selectedNode.customImage,
             hasMeter: selectedNode.hasMeter || false,
             meterNumber: selectedNode.meterNumber || '',
             hasGeneratorConnection: selectedNode.hasGeneratorConnection || false,
@@ -86,6 +92,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             kva: undefined,
             description: '',
             customColor: undefined,
+            shape: 'rectangle',
+            customImage: undefined,
             hasMeter: false,
             meterNumber: '',
             hasGeneratorConnection: false,
@@ -106,7 +114,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
               strokeColor: selectedNode.connectionStyle?.strokeColor || COMPONENT_CONFIG[selectedNode.type]?.color || '#475569',
               lineStyle: selectedNode.connectionStyle?.lineStyle || 'solid',
               startMarker: selectedNode.connectionStyle?.startMarker || 'none',
-              endMarker: selectedNode.connectionStyle?.endMarker || 'none'
+              endMarker: selectedNode.connectionStyle?.endMarker || 'none',
+              cableSize: selectedNode.connectionStyle?.cableSize || ''
           });
       }
   }, [selectedNode, selectionMode]);
@@ -130,6 +139,23 @@ export const InputPanel: React.FC<InputPanelProps> = ({
       onEditConnection(newStyle);
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+              const base64 = ev.target?.result as string;
+              setFormData(prev => ({ ...prev, customImage: base64 }));
+          };
+          reader.readAsDataURL(file);
+      }
+  };
+
+  const handleRemoveImage = () => {
+      setFormData(prev => ({ ...prev, customImage: undefined }));
+      if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (multiSelectionCount > 1 && onBulkEdit) {
@@ -146,6 +172,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             kva: undefined,
             description: '',
             customColor: undefined,
+            shape: 'rectangle',
+            customImage: undefined,
             hasMeter: false,
             meterNumber: '',
             hasGeneratorConnection: false,
@@ -198,6 +226,20 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                         <option key={model} value={model} />
                     ))}
                   </datalist>
+                </div>
+
+                <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.shape}</label>
+                    <select
+                        name="shape"
+                        value={formData.shape || 'rectangle'}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    >
+                        <option value="rectangle">{t.inputPanel.shapes.rectangle}</option>
+                        <option value="circle">{t.inputPanel.shapes.circle}</option>
+                        <option value="square">{t.inputPanel.shapes.square}</option>
+                    </select>
                 </div>
                 
                 <div className="pt-2">
@@ -291,6 +333,18 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                             className="flex-1 bg-slate-900 border border-slate-700 text-white rounded px-3 py-1.5 text-sm uppercase"
                         />
                       </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.cableSize}</label>
+                    <input
+                        type="text"
+                        name="cableSize"
+                        value={connectionData.cableSize || ''}
+                        onChange={handleConnectionChange}
+                        placeholder="e.g. 4x25mm²"
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    />
                   </div>
                   
                   <div>
@@ -415,19 +469,60 @@ export const InputPanel: React.FC<InputPanelProps> = ({
         </div>
 
         {activeTab === 'edit' && (
-            <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
-                <div className="flex items-center gap-2">
-                    <input 
-                        type="color" 
-                        name="customColor"
-                        value={formData.customColor || COMPONENT_CONFIG[formData.type]?.color || '#475569'}
-                        onChange={handleChange}
-                        className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
-                    />
-                     <span className="text-xs text-slate-500">
-                        {formData.customColor || 'Default'}
-                    </span>
+            <div className="space-y-4 border-b border-slate-700 pb-4 mb-4">
+                <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
+                    <div className="flex items-center gap-2">
+                        <input 
+                            type="color" 
+                            name="customColor"
+                            value={formData.customColor || COMPONENT_CONFIG[formData.type]?.color || '#475569'}
+                            onChange={handleChange}
+                            className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
+                        />
+                         <span className="text-xs text-slate-500">
+                            {formData.customColor || 'Default'}
+                        </span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.shape}</label>
+                        <select
+                            name="shape"
+                            value={formData.shape || 'rectangle'}
+                            onChange={handleChange}
+                            className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                        >
+                            <option value="rectangle">{t.inputPanel.shapes.rectangle}</option>
+                            <option value="circle">{t.inputPanel.shapes.circle}</option>
+                            <option value="square">{t.inputPanel.shapes.square}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.uploadIcon}</label>
+                        <input 
+                            type="file" 
+                            accept="image/*"
+                            ref={fileInputRef}
+                            onChange={handleImageUpload}
+                            className="hidden" 
+                        />
+                        <button 
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full bg-slate-700 hover:bg-slate-600 text-white rounded px-2 py-2 text-xs flex items-center justify-center gap-2"
+                        >
+                            <span className="material-icons-round text-sm">upload</span>
+                            {formData.customImage ? t.inputPanel.removeIcon : t.inputPanel.uploadIcon}
+                        </button>
+                        {formData.customImage && (
+                             <button type="button" onClick={handleRemoveImage} className="text-[10px] text-red-400 mt-1 hover:underline w-full text-center">
+                                 {t.inputPanel.removeIcon}
+                             </button>
+                        )}
+                    </div>
                 </div>
             </div>
         )}
