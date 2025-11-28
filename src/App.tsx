@@ -1,17 +1,97 @@
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
+import { PrintSettingsPanel } from './components/PrintSettingsPanel';
 import { AnalysisModal } from './components/AnalysisModal';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { ExportModal } from './components/ExportModal';
 import { AboutModal } from './components/AboutModal';
-import { ElectricalNode, NewNodeData, AnalysisResult, Project, Page, ComponentType, ConnectionStyle } from './types';
-import { DEFAULT_PROJECT, DEFAULT_CONNECTION_STYLE } from './constants';
+import { ElectricalNode, NewNodeData, AnalysisResult, Project, Page, ComponentType, ConnectionStyle, PrintMetadata } from './types';
+import { DEFAULT_PROJECT, DEFAULT_CONNECTION_STYLE, DEFAULT_PRINT_METADATA } from './constants';
 import { analyzeCircuit } from './services/geminiService';
 import { translations } from './translations';
 
 type Language = 'en' | 'he' | 'ar';
 type Theme = 'light' | 'dark';
+
+// --- Helper Functions (Moved outside component for stability) ---
+
+const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+
+const findNodeInTree = (node: ElectricalNode, id: string): ElectricalNode | null => {
+    if (node.id === id) return node;
+    for (const child of node.children) {
+        const found = findNodeInTree(child, id);
+        if (found) return found;
+    }
+    return null;
+};
+
+const findNode = (roots: ElectricalNode[], id: string): ElectricalNode | null => {
+  for (const root of roots) {
+      if (root.id === id) return root;
+      const found = findNodeInTree(root, id);
+      if (found) return found;
+  }
+  return null;
+};
+
+const addNodeToTree = (currentNode: ElectricalNode, parentId: string, newNode: ElectricalNode): ElectricalNode => {
+  if (currentNode.id === parentId) {
+    return { ...currentNode, children: [...currentNode.children, newNode] };
+  }
+  return { ...currentNode, children: currentNode.children.map(child => addNodeToTree(child, parentId, newNode)) };
+};
+
+const editNodeInTree = (currentNode: ElectricalNode, nodeId: string, updatedData: Partial<ElectricalNode>): ElectricalNode => {
+  if (currentNode.id === nodeId) {
+    return { ...currentNode, ...updatedData };
+  }
+  return { ...currentNode, children: currentNode.children.map(child => editNodeInTree(child, nodeId, updatedData)) };
+};
+
+const addExtraConnectionToTree = (currentNode: ElectricalNode, nodeId: string, targetId: string): ElectricalNode => {
+  if (currentNode.id === nodeId) {
+      const currentExtras = currentNode.extraConnections || [];
+      if (currentExtras.includes(targetId)) return currentNode;
+      return { ...currentNode, extraConnections: [...currentExtras, targetId] };
+  }
+  return { ...currentNode, children: currentNode.children.map(child => addExtraConnectionToTree(child, nodeId, targetId)) };
+};
+
+const removeExtraConnectionFromTree = (currentNode: ElectricalNode, targetIdToRemove: string): ElectricalNode => {
+    let newNode = { ...currentNode };
+    if (newNode.extraConnections && newNode.extraConnections.includes(targetIdToRemove)) {
+        newNode.extraConnections = newNode.extraConnections.filter(id => id !== targetIdToRemove);
+    }
+    newNode.children = newNode.children.map(child => removeExtraConnectionFromTree(child, targetIdToRemove));
+    return newNode;
+};
+
+const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): ElectricalNode => {
+   const isDirectChild = currentNode.children.some(child => child.id === nodeIdToDelete);
+   if (isDirectChild) {
+       return {
+           ...currentNode,
+           children: currentNode.children.filter(child => child.id !== nodeIdToDelete)
+       };
+   }
+   return {
+       ...currentNode,
+       children: currentNode.children.map(child => deleteNodeInTree(child, nodeIdToDelete))
+   };
+};
+
+const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
+    const newId = generateId(`${node.type}`);
+    return {
+        ...node,
+        id: newId,
+        children: node.children.map(child => cloneNodeTree(child)),
+        extraConnections: [] // Clear external connections for clean copy
+    };
+};
 
 export default function App() {
   const [projects, setProjects] = useState<Project[]>(() => {
@@ -58,12 +138,12 @@ export default function App() {
   const [showExportModal, setShowExportModal] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [isPrintMode, setIsPrintMode] = useState(false);
+  const [printSettingsFocus, setPrintSettingsFocus] = useState<string | undefined>(undefined);
   
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<Theme>('light');
   const [showAddIndependentMenu, setShowAddIndependentMenu] = useState(false);
 
-  // Type assertion to handle dynamic keys in translation object
   const t = translations[language] as any;
   const isRTL = language === 'he' || language === 'ar';
   const isDark = theme === 'dark';
@@ -87,27 +167,6 @@ export default function App() {
 
   const activeProject = projects.find(p => p.id === activeProjectId) || projects[0];
   const activePage = activeProject.pages.find(p => p.id === activePageId) || activeProject.pages[0];
-  
-  const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-
-  // --- Helpers ---
-  const findNodeInTree = (node: ElectricalNode, id: string): ElectricalNode | null => {
-      if (node.id === id) return node;
-      for (const child of node.children) {
-          const found = findNodeInTree(child, id);
-          if (found) return found;
-      }
-      return null;
-  };
-
-  const findNode = (roots: ElectricalNode[], id: string): ElectricalNode | null => {
-    for (const root of roots) {
-        if (root.id === id) return root;
-        const found = findNodeInTree(root, id);
-        if (found) return found;
-    }
-    return null;
-  };
 
   const requestConfirmation = (title: string, message: string, action: () => void) => {
     setConfirmModal({
@@ -160,7 +219,7 @@ export default function App() {
     }
   }, [future, projects, activeProjectId, activePageId]);
 
-  const updatePage = (updater: (page: Page) => Page) => {
+  const updatePage = useCallback((updater: (page: Page) => Page) => {
       setProjects(prevProjects => {
           return prevProjects.map(p => {
               if (p.id !== activeProjectId) return p;
@@ -173,71 +232,29 @@ export default function App() {
               };
           });
       });
-  };
+  }, [activeProjectId, activePageId]);
 
-  // --- State Modifiers ---
-  const addNodeToTree = (currentNode: ElectricalNode, parentId: string, newNode: ElectricalNode): ElectricalNode => {
-    if (currentNode.id === parentId) {
-      return { ...currentNode, children: [...currentNode.children, newNode] };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => addNodeToTree(child, parentId, newNode)) };
-  };
+  const handleUpdatePrintMetadata = useCallback((metadata: PrintMetadata) => {
+      setProjects(prev => prev.map(p => {
+          if (p.id !== activeProjectId) return p;
+          return { ...p, printMetadata: metadata };
+      }));
+  }, [activeProjectId]);
 
-  const editNodeInTree = (currentNode: ElectricalNode, nodeId: string, updatedData: Partial<ElectricalNode>): ElectricalNode => {
-    if (currentNode.id === nodeId) {
-      return { ...currentNode, ...updatedData };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => editNodeInTree(child, nodeId, updatedData)) };
-  };
-
-  const addExtraConnectionToTree = (currentNode: ElectricalNode, nodeId: string, targetId: string): ElectricalNode => {
-    if (currentNode.id === nodeId) {
-        const currentExtras = currentNode.extraConnections || [];
-        if (currentExtras.includes(targetId)) return currentNode;
-        return { ...currentNode, extraConnections: [...currentExtras, targetId] };
-    }
-    return { ...currentNode, children: currentNode.children.map(child => addExtraConnectionToTree(child, nodeId, targetId)) };
-  };
-
-  const removeExtraConnectionFromTree = (currentNode: ElectricalNode, targetIdToRemove: string): ElectricalNode => {
-      let newNode = { ...currentNode };
-      if (newNode.extraConnections && newNode.extraConnections.includes(targetIdToRemove)) {
-          newNode.extraConnections = newNode.extraConnections.filter(id => id !== targetIdToRemove);
-      }
-      newNode.children = newNode.children.map(child => removeExtraConnectionFromTree(child, targetIdToRemove));
-      return newNode;
-  };
-
-  const deleteNodeInTree = (currentNode: ElectricalNode, nodeIdToDelete: string): ElectricalNode => {
-     const isDirectChild = currentNode.children.some(child => child.id === nodeIdToDelete);
-     if (isDirectChild) {
-         return {
-             ...currentNode,
-             children: currentNode.children.filter(child => child.id !== nodeIdToDelete)
-         };
-     }
-     return {
-         ...currentNode,
-         children: currentNode.children.map(child => deleteNodeInTree(child, nodeIdToDelete))
-     };
-  };
-
-  // --- Copy & Paste Logic ---
-  const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
-      const newId = generateId(`${node.type}`);
-      return {
-          ...node,
-          id: newId,
-          children: node.children.map(child => cloneNodeTree(child)),
-          extraConnections: [] // Clear external connections for clean copy
-      };
-  };
+  const handleUpdateProjectName = useCallback((name: string) => {
+      setProjects(prev => prev.map(p => {
+          if (p.id !== activeProjectId) return p;
+          return { ...p, name };
+      }));
+  }, [activeProjectId]);
 
   const handleCopy = useCallback(() => {
       if (selectedNode) {
+          // IMPORTANT: Lookup node in the live state tree to avoid circular references from D3
           const freshNode = findNode(activePage.items, selectedNode.id);
           if (freshNode) {
               try {
+                  // JSON parse/stringify to ensure no non-serializable properties (like D3 refs) are copied
                   const copy = JSON.parse(JSON.stringify(freshNode));
                   setClipboard(copy);
               } catch (e) {
@@ -251,20 +268,22 @@ export default function App() {
       if (!clipboard) return;
       saveToHistory();
       
+      // Recursive clone to generate fresh IDs and strip extra connections
       const newNode = cloneNodeTree(clipboard);
       newNode.name = `${newNode.name} (Copy)`;
 
       updatePage((page) => {
           if (selectedNode) {
+              // Paste as child of selected node
               const items = page.items.map(root => addNodeToTree(root, selectedNode.id, newNode));
               return { ...page, items };
           } else {
+              // Paste as independent node
               return { ...page, items: [...page.items, newNode] };
           }
       });
-  }, [clipboard, selectedNode, saveToHistory]); 
+  }, [clipboard, selectedNode, saveToHistory, updatePage]); 
 
-  // --- Atomic Bulk Delete ---
   const executeBulkDelete = (idsToDelete: Set<string>) => {
       if (idsToDelete.size === 0) return;
       saveToHistory();
@@ -299,7 +318,6 @@ export default function App() {
       setConnectionSource(null);
   };
 
-  // --- Node Operations ---
   const executeDeleteNode = (node: ElectricalNode) => {
       saveToHistory(); 
       updatePage((page) => {
@@ -324,7 +342,7 @@ export default function App() {
       const nodeToDelete = node || selectedNode;
       if (!nodeToDelete) return;
       requestConfirmation(`${t.dialogs.deleteNodeTitle}`, `${t.dialogs.deleteNode}`, () => executeDeleteNode(nodeToDelete));
-  }, [selectedNode, t]);
+  }, [selectedNode, t, updatePage, saveToHistory]);
 
   const handleDisconnectLink = () => {
       if (!selectedNode || !selectedLinkParentId) return;
@@ -380,7 +398,6 @@ export default function App() {
       }
   };
 
-  // --- Keyboard Shortcuts ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCtrl = e.ctrlKey || e.metaKey;
@@ -442,7 +459,7 @@ export default function App() {
       handleCopy, 
       handlePaste, 
       t, 
-      updatePage, // Ensure updatePage is included
+      updatePage,
       saveToHistory
   ]); 
 
@@ -610,7 +627,7 @@ export default function App() {
           case ComponentType.LOAD: desc = t.defaultDesc.load; break;
       }
       const newNode: ElectricalNode = {
-        id: generateId(`${type}`.toLowerCase()),
+        id: generateId(String(type).toLowerCase()),
         name: name,
         type: type,
         description: desc,
@@ -825,6 +842,11 @@ export default function App() {
       const clone = svgElement.cloneNode(true) as SVGSVGElement;
       const buttons = clone.querySelectorAll('circle[stroke-dasharray], rect[stroke-dasharray]');
       buttons.forEach(b => b.parentElement?.remove());
+      
+      // Remove edit buttons from the clone before exporting
+      const editButtons = clone.querySelectorAll('.print-layout-edit-btn');
+      editButtons.forEach(b => b.remove());
+
       const originalGroup = svgElement.querySelector('g');
       const cloneGroup = clone.querySelector('g');
       if (originalGroup && cloneGroup) {
@@ -994,7 +1016,7 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (e) => {
         try {
-            const content = (e.target as FileReader).result;
+            const content = reader.result;
             if (typeof content !== 'string') return;
             
             let importedData: any = JSON.parse(content);
@@ -1162,6 +1184,17 @@ export default function App() {
     return matches;
   }, [activePage.items, searchTerm]);
 
+  const handleEditPrintSettings = useCallback((focusField?: string) => {
+      setIsPrintMode(true);
+      setShowProjectSidebar(true);
+      setSelectedNode(null);
+      setMultiSelection(new Set());
+      setSelectionMode('node');
+      setIsConnectMode(false);
+      setConnectionSource(null);
+      setPrintSettingsFocus(focusField);
+  }, []);
+
   return (
     <div className={`min-h-screen flex flex-col font-sans ${isDark ? 'text-slate-200 bg-slate-900' : 'text-slate-800 bg-slate-50'} ${isRTL ? 'rtl' : 'ltr'}`} dir={isRTL ? 'rtl' : 'ltr'}>
       
@@ -1194,6 +1227,18 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-3">
+             {isPrintMode && (
+                <button 
+                    onClick={() => {
+                        handleEditPrintSettings();
+                    }}
+                    className="p-2 bg-blue-600 text-white border border-blue-500 shadow-lg shadow-blue-900/20 rounded-lg animate-pulse hover:bg-blue-500 transition-colors"
+                    title={t.printSettings.title}
+                >
+                    <span className="material-icons-round">settings</span>
+                </button>
+             )}
+
              <div className="relative">
                  <button 
                     onClick={() => setShowAddIndependentMenu(!showAddIndependentMenu)}
@@ -1244,7 +1289,17 @@ export default function App() {
                 <span className="material-icons-round">info</span>
             </button>
 
-             <button onClick={() => setIsPrintMode(!isPrintMode)} className={`p-2 text-slate-400 hover:text-white rounded-lg border border-slate-700 ${isPrintMode ? 'bg-blue-600 text-white' : 'bg-slate-800 hover:bg-slate-700'}`} title={t.togglePrintMode}>
+             <button 
+                onClick={() => {
+                    const newState = !isPrintMode;
+                    setIsPrintMode(newState);
+                    if (newState) {
+                        handleEditPrintSettings();
+                    }
+                }} 
+                className={`p-2 text-slate-400 hover:text-white rounded-lg border border-slate-700 ${isPrintMode ? 'bg-blue-600 text-white' : 'bg-slate-800 hover:bg-slate-700'}`} 
+                title={t.togglePrintMode}
+            >
                 <span className="material-icons-round">picture_as_pdf</span>
             </button>
 
@@ -1388,6 +1443,7 @@ export default function App() {
                     isPrintMode={isPrintMode}
                     activeProject={activeProject}
                     onDisconnectLink={handleDisconnectLink}
+                    onEditPrintSettings={handleEditPrintSettings}
                     t={t}
                     language={language}
                     theme={theme}
@@ -1396,40 +1452,68 @@ export default function App() {
         </div>
 
         <aside className="w-96 bg-slate-900 border-l border-slate-800 overflow-y-auto flex flex-col z-30 shadow-2xl">
-            <div className="p-4 border-b border-slate-800 bg-slate-800/30">
-                <h2 className="font-bold text-slate-200 flex items-center gap-2">
-                    <span className="material-icons-round text-blue-400">tune</span>
-                    {t.propertiesActions}
-                </h2>
-            </div>
+            {isPrintMode && !selectedNode ? (
+                <div className="flex flex-col h-full">
+                     <div className="p-4 border-b border-slate-800 bg-slate-800/30">
+                        <button 
+                            onClick={() => handleEditPrintSettings()}
+                            className="w-full py-2 px-4 bg-blue-600/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-600/30 transition-colors flex items-center justify-center gap-2 mb-2"
+                        >
+                            <span className="material-icons-round text-sm">edit</span>
+                            <span className="text-sm font-bold">{t.printSettings.title}</span>
+                        </button>
+                    </div>
+                    <div className="p-4 flex-1 overflow-y-auto">
+                        <PrintSettingsPanel 
+                            key={activeProjectId}
+                            metadata={activeProject.printMetadata || DEFAULT_PRINT_METADATA}
+                            projectName={activeProject.name}
+                            onChange={handleUpdatePrintMetadata}
+                            onUpdateProjectName={handleUpdateProjectName}
+                            onClose={() => setIsPrintMode(false)}
+                            focusField={printSettingsFocus}
+                            t={t}
+                        />
+                    </div>
+                </div>
+            ) : (
+                <>
+                    <div className="p-4 border-b border-slate-800 bg-slate-800/30">
+                        <h2 className="font-bold text-slate-200 flex items-center gap-2">
+                            <span className="material-icons-round text-blue-400">tune</span>
+                            {t.propertiesActions}
+                        </h2>
+                    </div>
 
-            <div className="p-4 flex-1 overflow-y-auto">
-                <InputPanel 
-                    selectedNode={selectedNode}
-                    selectionMode={selectionMode}
-                    multiSelectionCount={multiSelection.size}
-                    onAdd={handleAddNode}
-                    onAddIndependent={handleAddIndependentNode}
-                    onEdit={handleEditNode}
-                    onBulkEdit={handleBulkEdit}
-                    onEditConnection={updateNodeConnectionStyle}
-                    onDelete={() => {
-                        if (multiSelection.size > 0) {
-                            if(confirm(`${t.dialogs.deleteNode}`)) {
-                                executeBulkDelete(multiSelection);
-                            }
-                        } else if (selectedNode) {
-                            handleDeleteNodeClick(selectedNode);
-                        }
-                    }}
-                    onCancel={() => { setSelectedNode(null); setMultiSelection(new Set()); setSelectionMode('node'); }}
-                    onDetach={handleDetachNode}
-                    onStartConnection={handleStartConnection}
-                    onNavigate={handleNavigateToNode}
-                    onDisconnectLink={handleDisconnectLink}
-                    t={t}
-                />
-            </div>
+                    <div className="p-4 flex-1 overflow-y-auto">
+                        <InputPanel 
+                            selectedNode={selectedNode}
+                            selectionMode={selectionMode}
+                            multiSelectionCount={multiSelection.size}
+                            onAdd={handleAddNode}
+                            onAddIndependent={handleAddIndependentNode}
+                            onEdit={handleEditNode}
+                            onBulkEdit={handleBulkEdit}
+                            onEditConnection={updateNodeConnectionStyle}
+                            onDelete={() => {
+                                if (multiSelection.size > 0) {
+                                    if(confirm(`${t.dialogs.deleteNode}`)) {
+                                        executeBulkDelete(multiSelection);
+                                    }
+                                } else if (selectedNode) {
+                                    handleDeleteNodeClick(selectedNode);
+                                }
+                            }}
+                            onCancel={() => { setSelectedNode(null); setMultiSelection(new Set()); setSelectionMode('node'); }}
+                            onDetach={handleDetachNode}
+                            onStartConnection={handleStartConnection}
+                            onNavigate={handleNavigateToNode}
+                            onDisconnectLink={handleDisconnectLink}
+                            t={t}
+                        />
+                    </div>
+                </>
+            )}
             
             <div className="p-4 border-t border-slate-800 text-center">
                  <button onClick={handleReset} className="text-xs text-red-400 hover:text-red-300 hover:underline transition-colors">

@@ -71,10 +71,19 @@ export interface Page {
   items: ElectricalNode[]; // Changed from rootNode to items array to support multiple disconnected trees
 }
 
+export interface PrintMetadata {
+  engineer: string;
+  approvedBy: string;
+  date: string;
+  revision: string;
+  organization: string;
+}
+
 export interface Project {
   id: string;
   name: string;
   pages: Page[];
+  printMetadata?: PrintMetadata;
 }
 
 export interface AnalysisResult {

@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
-import { COMPONENT_CONFIG, ICON_PATHS } from '../constants';
+import { COMPONENT_CONFIG, ICON_PATHS, DEFAULT_PRINT_METADATA } from '../constants';
 
 interface DiagramProps {
   data: ElectricalNode[];
@@ -26,12 +26,13 @@ interface DiagramProps {
   isPrintMode?: boolean;
   activeProject?: Project;
   onDisconnectLink?: () => void;
+  onEditPrintSettings?: (field?: string) => void;
   t: any;
   language: string;
   theme: 'light' | 'dark';
 }
 
-interface ExtendedHierarchyNode extends d3.HierarchyPointNode<ElectricalNode> {
+type ExtendedHierarchyNode = Omit<d3.HierarchyPointNode<ElectricalNode>, 'parent' | 'children'> & {
   width: number;
   height: number;
   x: number;
@@ -45,7 +46,7 @@ interface ExtendedHierarchyNode extends d3.HierarchyPointNode<ElectricalNode> {
   children?: ExtendedHierarchyNode[] | undefined;
   parent: ExtendedHierarchyNode | null;
   data: ElectricalNode;
-}
+};
 
 export const Diagram: React.FC<DiagramProps> = ({ 
     data, 
@@ -69,6 +70,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     isPrintMode = false,
     activeProject,
     onDisconnectLink,
+    onEditPrintSettings,
     t,
     language,
     theme
@@ -133,7 +135,9 @@ export const Diagram: React.FC<DiagramProps> = ({
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
     
+    // Background click handler
     svg.on("click", (event) => {
+        if (event.defaultPrevented) return; // Zoom drag
         onBackgroundClick?.();
     });
 
@@ -407,8 +411,8 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     };
 
-    const extraLinksToRender: { source: d3.HierarchyNode<ElectricalNode>; target: d3.HierarchyNode<ElectricalNode>; }[] = [];
-    const nodeLookup = new Map<string, d3.HierarchyNode<ElectricalNode>>();
+    const extraLinksToRender: { source: ExtendedHierarchyNode; target: ExtendedHierarchyNode; }[] = [];
+    const nodeLookup = new Map<string, ExtendedHierarchyNode>();
     nodesToRender.forEach(d => nodeLookup.set(d.data.id, d));
 
     nodesToRender.forEach(d => {
@@ -539,23 +543,26 @@ export const Diagram: React.FC<DiagramProps> = ({
         const selectedLink = linksToRender.find(d => d.target.data.id === selectedLinkId) || extraLinksToRender.find(d => d.target.data.id === selectedLinkId);
         
         if (selectedLink) {
-             const sXOffset = selectedLink.source.data.manualX || 0;
-             const sYOffset = selectedLink.source.data.manualY || 0;
-             const tXOffset = selectedLink.target.data.manualX || 0;
-             const tYOffset = selectedLink.target.data.manualY || 0;
+             const source = selectedLink.source as any;
+             const target = selectedLink.target as any;
+             
+             const sXOffset = source.data.manualX || 0;
+             const sYOffset = source.data.manualY || 0;
+             const tXOffset = target.data.manualX || 0;
+             const tYOffset = target.data.manualY || 0;
              
              let srcX, srcY, tgtX, tgtY;
              
              if (orientation === 'horizontal') {
-                 srcX = selectedLink.source.y + selectedLink.source.width + sXOffset;
-                 srcY = selectedLink.source.x + sYOffset;
-                 tgtX = selectedLink.target.y + tXOffset;
-                 tgtY = selectedLink.target.x + tYOffset;
+                 srcX = source.y + source.width + sXOffset;
+                 srcY = source.x + sYOffset;
+                 tgtX = target.y + tXOffset;
+                 tgtY = target.x + tYOffset;
              } else {
-                 srcX = selectedLink.source.x + sXOffset;
-                 srcY = selectedLink.source.y + selectedLink.source.height + sYOffset;
-                 tgtX = selectedLink.target.x + tXOffset;
-                 tgtY = selectedLink.target.y + tYOffset;
+                 srcX = source.x + sXOffset;
+                 srcY = source.y + source.height + sYOffset;
+                 tgtX = target.x + tXOffset;
+                 tgtY = target.y + tYOffset;
              }
 
              const midX = (srcX + tgtX) / 2;
@@ -651,16 +658,16 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     nodes.filter((d: ExtendedHierarchyNode) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
          .append('circle').attr('r', 8)
-         .attr('cx', d => orientation === 'horizontal' ? d.width : 0).attr('cy', d => orientation === 'horizontal' ? 0 : d.height)
+         .attr('cx', (d: ExtendedHierarchyNode) => orientation === 'horizontal' ? d.width : 0).attr('cy', (d: ExtendedHierarchyNode) => orientation === 'horizontal' ? 0 : d.height)
          .attr('fill', dotColor).attr('stroke', secondaryTextColor).attr('stroke-width', 1).style('pointer-events', 'none');
     
     nodes.filter((d: ExtendedHierarchyNode) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
          .append('text').attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
-         .attr('x', d => orientation === 'horizontal' ? d.width : 0).attr('y', d => orientation === 'horizontal' ? 0 : d.height)
+         .attr('x', (d: ExtendedHierarchyNode) => orientation === 'horizontal' ? d.width : 0).attr('y', (d: ExtendedHierarchyNode) => orientation === 'horizontal' ? 0 : d.height)
          .attr('fill', secondaryTextColor).style('font-size', '12px').style('font-weight', 'bold').text('+');
 
     nodes.append('path')
-      .attr('d', d => {
+      .attr('d', (d: any) => {
           const r = 12; const box = getRectBox(d);
           return `M${box.x},${box.y + 6} v${-6 + r} a${r},${r} 0 0 1 ${r},${-r} h${box.w - 2*r} a${r},${r} 0 0 1 ${r},${r} v${6 - r}`;
       })
@@ -825,76 +832,144 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     // --- PRINT LAYOUT TITLE BLOCK ---
     if (isPrintMode && activeProject) {
-        const blockW = 400;
-        const blockH = 120;
-        // STARTING AFTER CONTENT: maxX + 50
-        const xStart = maxX + 50; 
-        const yStart = maxY + 50 - blockH;
+        const metadata = activeProject.printMetadata || DEFAULT_PRINT_METADATA;
+        const blockW = 500; // Fixed Width
+        const blockH = 100; // Fixed Height
+        const xStart = maxX + 40; 
+        const yStart = maxY + 40 - blockH;
 
-        const titleBlock = g.append('g').attr('transform', `translate(${xStart}, ${yStart})`);
+        const titleBlock = g.append('g')
+            .attr('transform', `translate(${xStart}, ${yStart})`)
+            .style('cursor', 'pointer');
+            
+        // Main Background (Captures general clicks)
+        titleBlock.append('rect')
+            .attr('width', blockW).attr('height', blockH)
+            .attr('fill', isDark ? '#1e293b' : '#ffffff').attr('fill-opacity', 0.8)
+            .attr('stroke', textColor).attr('stroke-width', 2)
+            .style('pointer-events', 'all') 
+            .on('click', function(e) {
+                if (e.defaultPrevented) return;
+                e.stopPropagation();
+                if (onEditPrintSettings) onEditPrintSettings();
+            });
         
-        titleBlock.append('rect').attr('width', blockW).attr('height', blockH)
-            .attr('fill', 'none').attr('stroke', textColor).attr('stroke-width', 2);
-        
-        const dividerX = isRTL ? blockW * 0.3 : blockW * 0.7;
+        const dividerX = isRTL ? blockW * 0.35 : blockW * 0.65;
+        const rowH = blockH / 3;
 
-        titleBlock.append('line').attr('x1', 0).attr('y1', blockH/2).attr('x2', blockW).attr('y2', blockH/2)
-            .attr('stroke', textColor).attr('stroke-width', 1);
-        titleBlock.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', blockH/2)
-            .attr('stroke', textColor).attr('stroke-width', 1);
+        // Lines
+        titleBlock.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', blockH)
+            .attr('stroke', textColor).attr('stroke-width', 1).style('pointer-events', 'none');
+        titleBlock.append('line').attr('x1', 0).attr('y1', rowH).attr('x2', blockW).attr('y2', rowH)
+            .attr('stroke', textColor).attr('stroke-width', 1).style('pointer-events', 'none');
+        titleBlock.append('line').attr('x1', 0).attr('y1', rowH*2).attr('x2', blockW).attr('y2', rowH*2)
+            .attr('stroke', textColor).attr('stroke-width', 1).style('pointer-events', 'none');
 
-        const addText = (text: string, xBase: number, y: number, size: number = 12, weight: string = 'normal', anchor: string = 'start') => {
-            titleBlock.append('text')
-                .attr('x', xBase)
-                .attr('y', y)
-                .text(text)
-                .attr('fill', textColor)
-                .attr('font-size', `${size}px`)
-                .attr('font-weight', weight)
-                .attr('text-anchor', anchor)
-                .style('font-family', 'sans-serif');
+        // Helper for text alignment
+        let wideColX, narrowColX;
+        if (isRTL) {
+            narrowColX = dividerX / 2;
+            wideColX = dividerX + ((blockW - dividerX) / 2);
+        } else {
+            wideColX = dividerX / 2;
+            narrowColX = dividerX + ((blockW - dividerX) / 2);
+        }
+
+        const renderCell = (label: string, value: string, cx: number, cy: number, fieldKey: string) => {
+             // Invisible hit area for cell
+             const cellW = (fieldKey === 'projectName' || fieldKey === 'organization' || fieldKey === 'engineer') 
+                ? (isRTL ? blockW - dividerX : dividerX) 
+                : (isRTL ? dividerX : blockW - dividerX);
+             
+             // Approximate x/y for hit rect
+             let rx = 0;
+             if (isRTL) {
+                rx = (fieldKey === 'projectName' || fieldKey === 'organization' || fieldKey === 'engineer') ? dividerX : 0;
+             } else {
+                rx = (fieldKey === 'projectName' || fieldKey === 'organization' || fieldKey === 'engineer') ? 0 : dividerX;
+             }
+
+             // Append click handler rect for this cell
+             titleBlock.append('rect')
+                .attr('x', rx).attr('y', cy - 10) // Adjust y to match row start roughly
+                .attr('width', cellW).attr('height', rowH)
+                .attr('fill', 'white').attr('fill-opacity', 0.01) // Nearly transparent for reliable hit testing
+                .style('cursor', 'pointer')
+                .style('pointer-events', 'all')
+                .on('click', (e) => {
+                    if (e.defaultPrevented) return;
+                    e.stopPropagation();
+                    if (onEditPrintSettings) onEditPrintSettings(fieldKey);
+                })
+                .append('title').text(`Edit ${label}`);
+
+             titleBlock.append('text')
+                .attr('x', cx).attr('y', cy)
+                .text(label)
+                .attr('fill', textColor).attr('font-size', '9px').attr('font-weight', 'bold')
+                .attr('text-anchor', 'middle') .style('opacity', 0.7)
+                .style('pointer-events', 'none');
+             
+             titleBlock.append('text')
+                .attr('x', cx).attr('y', cy + 14)
+                .text(value)
+                .attr('fill', textColor).attr('font-size', '13px')
+                .attr('text-anchor', 'middle')
+                .style('pointer-events', 'none');
         };
 
-        if (isRTL) {
-            addText(t.printLayout.project, blockW - 10, 20, 10, 'bold', 'start');
-            addText(activeProject.name, blockW - 10, 45, 16, 'bold', 'start');
-            addText(t.printLayout.date, dividerX - 10, 20, 10, 'bold', 'start');
-            addText(new Date().toLocaleDateString(), dividerX - 10, 45, 12, 'normal', 'start');
-            addText(t.printLayout.engineer, blockW - 10, blockH/2 + 20, 10, 'bold', 'start');
-            addText("Saleh Hamdan", blockW - 10, blockH - 15, 14, 'normal', 'start');
-            addText(t.printLayout.rev, dividerX - 10, blockH/2 + 20, 10, 'bold', 'start');
-            addText("1.0", dividerX - 10, blockH - 15, 14, 'normal', 'start');
-        } else {
-            addText(t.printLayout.project, 10, 20, 10, 'bold', 'start');
-            addText(activeProject.name, 10, 45, 16, 'bold', 'start');
-            addText(t.printLayout.date, dividerX + 10, 20, 10, 'bold', 'start');
-            addText(new Date().toLocaleDateString(), dividerX + 10, 45, 12, 'normal', 'start');
-            addText(t.printLayout.engineer, 10, blockH/2 + 20, 10, 'bold', 'start');
-            addText("Saleh Hamdan", 10, blockH - 15, 14, 'normal', 'start');
-            addText(t.printLayout.rev, dividerX + 10, blockH/2 + 20, 10, 'bold', 'start');
-            addText("1.0", dividerX + 10, blockH - 15, 14, 'normal', 'start');
-        }
+        const yOffset = 10;
+        
+        // Row 1
+        renderCell(t.printLayout.project, activeProject.name, wideColX, yOffset, 'projectName');
+        renderCell(t.printLayout.date, metadata.date, narrowColX, yOffset, 'date');
+
+        // Row 2
+        renderCell(t.printLayout.org, metadata.organization, wideColX, rowH + yOffset, 'organization');
+        renderCell(t.printLayout.rev, metadata.revision, narrowColX, rowH + yOffset, 'revision');
+
+        // Row 3
+        renderCell(t.printLayout.engineer, metadata.engineer, wideColX, rowH*2 + yOffset, 'engineer');
+        renderCell(t.printLayout.approved, metadata.approvedBy, narrowColX, rowH*2 + yOffset, 'approvedBy');
+
+        // Edit Button (Global)
+        const editBtn = titleBlock.append('g')
+            .attr('class', 'print-layout-edit-btn')
+            .attr('transform', `translate(${blockW - 15}, 15)`) 
+            .style('cursor', 'pointer').style('pointer-events', 'all');
+
+        editBtn.append('circle').attr('r', 20).attr('fill', 'white').attr('fill-opacity', 0.01).attr('stroke', 'none');
+        editBtn.append('circle').attr('r', 12).attr('fill', '#3b82f6').attr('stroke', '#ffffff').attr('stroke-width', 2);
+        editBtn.append('path').attr('d', ICON_PATHS['edit']).attr('transform', 'translate(-8, -8) scale(0.66)').attr('fill', 'white');
+
+        editBtn.on('click', function(e) {
+             if (e.defaultPrevented) return;
+             e.stopPropagation();
+             if (onEditPrintSettings) onEditPrintSettings();
+        });
+
+        titleBlock.on('mouseenter', function() {
+            d3.select(this).select('rect').attr('stroke', '#3b82f6').attr('stroke-width', 3);
+        }).on('mouseleave', function() {
+            d3.select(this).select('rect').attr('stroke', textColor).attr('stroke-width', 2);
+        });
     }
 
-    // --- COMPONENT LEGEND (Moved inside `g`) ---
-    const legendW = 160;
-    const legendH = 280;
+    // --- COMPONENT LEGEND ---
+    const types = Object.values(ComponentType);
+    const legendW = 200; 
+    const legendH = 50 + types.length * 25; 
     
     let legX, legY;
 
     if (isPrintMode && activeProject) {
-        // Stack above title block, aligned to the right of the layout
-        const blockH = 120;
-        const xStart = maxX + 50;
-        const yStart = maxY + 50 - blockH;
-        
-        // Align left edge of legend to (TitleBlockRight - LegendWidth)
-        // TitleBlock is [xStart, xStart+400]
-        // We want [xStart + 400 - 160, ...]
-        legX = xStart + 400 - legendW;
+        const blockW = 500; 
+        const blockH = 100;
+        const xStart = maxX + 40;
+        const yStart = maxY + 40 - blockH;
+        legX = xStart + blockW - legendW; 
         legY = yStart - legendH - 10; 
     } else {
-        // Normal Mode: Place to the right of the content
         legX = maxX + 50;
         legY = minY;
     }
@@ -919,16 +994,26 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('font-weight', 'bold')
         .attr('fill', textColor)
         .attr('font-size', '12px')
-        .style('direction', 'ltr') 
         .text(t.legend.title);
 
-    const types = Object.values(ComponentType);
     types.forEach((type, i) => {
-        const y = 50 + i * 28;
+        const y = 50 + i * 25;
         const config = COMPONENT_CONFIG[type];
         
+        let iconX, textX, textAnchor;
+        
+        if (isRTL) {
+            iconX = legendW - 25;
+            textX = legendW / 2; // Center text in the legend box
+            textAnchor = 'middle'; // Center alignment
+        } else {
+            iconX = 25;
+            textX = 45;
+            textAnchor = 'start';
+        }
+
         legendG.append('circle')
-            .attr('cx', 20)
+            .attr('cx', iconX)
             .attr('cy', y)
             .attr('r', 8)
             .attr('fill', isDark ? '#0f172a' : '#f8fafc')
@@ -937,20 +1022,20 @@ export const Diagram: React.FC<DiagramProps> = ({
         
         legendG.append('path')
             .attr('d', ICON_PATHS[config.icon])
-            .attr('transform', `translate(${20-6}, ${y-6}) scale(0.5)`) 
+            .attr('transform', `translate(${iconX - 6}, ${y - 6}) scale(0.5)`) 
             .attr('fill', config.color);
             
         legendG.append('text')
-            .attr('x', 38)
-            .attr('y', y + 4)
+            .attr('x', textX) 
+            .attr('y', y) // Align with icon center
+            .attr('dominant-baseline', 'middle') // Vertical centering
             .attr('fill', textColor)
             .attr('font-size', '11px')
-            .attr('text-anchor', 'start')
-            .style('direction', 'ltr') 
+            .attr('text-anchor', textAnchor as any) 
             .text(t.componentTypes[type]);
     });
 
-  }, [data, dimensions, onNodeClick, onLinkClick, selectedNodeId, selectedLinkId, orientation, searchMatches, isConnectMode, connectionSourceId, t, language, theme, onBackgroundClick, multiSelection, isPrintMode, activeProject]);
+  }, [data, dimensions, onNodeClick, onLinkClick, selectedNodeId, selectedLinkId, orientation, searchMatches, isConnectMode, connectionSourceId, t, language, theme, onBackgroundClick, multiSelection, isPrintMode, activeProject, onEditPrintSettings]);
 
   return (
     <div ref={wrapperRef} className={`w-full h-full relative overflow-hidden ${isDark ? 'bg-slate-900' : 'bg-white'}`} style={{ touchAction: 'none' }}>

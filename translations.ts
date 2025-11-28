@@ -102,6 +102,15 @@ export const translations = {
       collapse: "Collapse Children",
       expand: "Expand Children"
     },
+    printSettings: {
+      title: "Print Layout Settings",
+      engineer: "Engineer Name",
+      approvedBy: "Approved By",
+      date: "Date",
+      revision: "Revision",
+      organization: "Organization / Company",
+      update: "Update Title Block"
+    },
     analysis: {
       title: "AI Circuit Analysis",
       analyzing: "Analyzing circuit logic with Gemini...",
@@ -173,7 +182,9 @@ export const translations = {
         project: "PROJECT",
         date: "DATE",
         engineer: "ENGINEER",
-        rev: "REV"
+        rev: "REV",
+        approved: "APPROVED",
+        org: "ORGANIZATION"
     }
   },
   he: {
@@ -276,6 +287,15 @@ export const translations = {
       collapse: "כווץ ילדים",
       expand: "הרחב ילדים"
     },
+    printSettings: {
+      title: "הגדרות תצוגת הדפסה",
+      engineer: "שם המהנדס",
+      approvedBy: "אושר על ידי",
+      date: "תאריך",
+      revision: "מהדורה",
+      organization: "ארגון / חברה",
+      update: "עדכן כותרת"
+    },
     analysis: {
       title: "ניתוח מעגל חשמלי",
       analyzing: "מנתח לוגיקה חשמלית עם Gemini...",
@@ -347,7 +367,9 @@ export const translations = {
         project: "פרויקט",
         date: "תאריך",
         engineer: "מהנדס",
-        rev: "מהדורה"
+        rev: "מהדורה",
+        approved: "אושר",
+        org: "ארגון"
     }
   },
   ar: {
@@ -450,6 +472,15 @@ export const translations = {
       collapse: "طي الأبناء",
       expand: "توسيع الأبناء"
     },
+    printSettings: {
+      title: "إعدادات تخطيط الطباعة",
+      engineer: "اسم المهندس",
+      approvedBy: "تمت الموافقة من قبل",
+      date: "التاريخ",
+      revision: "الإصدار",
+      organization: "المؤسسة / الشركة",
+      update: "تحديث الكتلة"
+    },
     analysis: {
       title: "تحليل الدائرة الكهربائية",
       analyzing: "جاري تحليل المنطق الكهربائي بواسطة Gemini...",
@@ -521,7 +552,9 @@ export const translations = {
         project: "المشروع",
         date: "التاريخ",
         engineer: "المهندس",
-        rev: "الإصدار"
+        rev: "الإصدار",
+        approved: "الموافقة",
+        org: "المؤسسة"
     }
   }
 };
