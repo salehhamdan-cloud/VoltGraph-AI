@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Diagram } from './components/Diagram';
-import { InputPanel } from './components/InputPanel';
-import { PrintSettingsPanel } from './components/PrintSettingsPanel';
-import { AnalysisModal } from './components/AnalysisModal';
-import { ConfirmationModal } from './components/ConfirmationModal';
-import { ExportModal } from './components/ExportModal';
-import { AboutModal } from './components/AboutModal';
-import { ElectricalNode, NewNodeData, AnalysisResult, Project, Page, ComponentType, ConnectionStyle, PrintMetadata } from './types';
-import { DEFAULT_PROJECT, DEFAULT_CONNECTION_STYLE, DEFAULT_PRINT_METADATA } from './constants';
-import { analyzeCircuit } from './services/geminiService';
-import { translations } from './translations';
+import { Diagram } from '../components/Diagram';
+import { InputPanel } from '../components/InputPanel';
+import { PrintSettingsPanel } from '../components/PrintSettingsPanel';
+import { AnalysisModal } from '../components/AnalysisModal';
+import { ConfirmationModal } from '../components/ConfirmationModal';
+import { ExportModal } from '../components/ExportModal';
+import { AboutModal } from '../components/AboutModal';
+import { ElectricalNode, NewNodeData, AnalysisResult, Project, Page, ComponentType, ConnectionStyle, PrintMetadata } from '../types';
+import { DEFAULT_PROJECT, DEFAULT_CONNECTION_STYLE, DEFAULT_PRINT_METADATA } from '../constants';
+import { analyzeCircuit } from '../services/geminiService';
+import { translations } from '../translations';
 
 type Language = 'en' | 'he' | 'ar';
 type Theme = 'light' | 'dark';

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { PrintMetadata } from '../types';
 
@@ -93,7 +92,7 @@ export const PrintSettingsPanel: React.FC<PrintSettingsPanelProps> = ({
         <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">{t.printLayout.project}</label>
             <input
-                ref={el => inputRefs.current['projectName'] = el}
+                ref={el => { inputRefs.current['projectName'] = el; }}
                 type="text"
                 value={localProjectName}
                 onChange={(e) => setLocalProjectName(e.target.value)}
@@ -105,7 +104,7 @@ export const PrintSettingsPanel: React.FC<PrintSettingsPanelProps> = ({
         <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">{t.printSettings.organization}</label>
             <input
-                ref={el => inputRefs.current['organization'] = el}
+                ref={el => { inputRefs.current['organization'] = el; }}
                 type="text"
                 name="organization"
                 value={formData.organization}
@@ -118,7 +117,7 @@ export const PrintSettingsPanel: React.FC<PrintSettingsPanelProps> = ({
         <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">{t.printSettings.engineer}</label>
             <input
-                ref={el => inputRefs.current['engineer'] = el}
+                ref={el => { inputRefs.current['engineer'] = el; }}
                 type="text"
                 name="engineer"
                 value={formData.engineer}
@@ -131,7 +130,7 @@ export const PrintSettingsPanel: React.FC<PrintSettingsPanelProps> = ({
         <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">{t.printSettings.approvedBy}</label>
             <input
-                ref={el => inputRefs.current['approvedBy'] = el}
+                ref={el => { inputRefs.current['approvedBy'] = el; }}
                 type="text"
                 name="approvedBy"
                 value={formData.approvedBy}
@@ -145,7 +144,7 @@ export const PrintSettingsPanel: React.FC<PrintSettingsPanelProps> = ({
             <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">{t.printSettings.date}</label>
                 <input
-                    ref={el => inputRefs.current['date'] = el}
+                    ref={el => { inputRefs.current['date'] = el; }}
                     type="text"
                     name="date"
                     value={formData.date}
@@ -157,7 +156,7 @@ export const PrintSettingsPanel: React.FC<PrintSettingsPanelProps> = ({
             <div>
                 <label className="block text-xs font-medium text-slate-400 mb-1">{t.printSettings.revision}</label>
                 <input
-                    ref={el => inputRefs.current['revision'] = el}
+                    ref={el => { inputRefs.current['revision'] = el; }}
                     type="text"
                     name="revision"
                     value={formData.revision}

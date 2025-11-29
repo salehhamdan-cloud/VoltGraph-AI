@@ -391,7 +391,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     treeLayout(root);
 
     const nodesToRender = root.descendants().filter(d => d.depth > 0) as unknown as ExtendedHierarchyNode[];
-    const linksToRender = root.links().filter(d => d.source.data.id !== 'virtual-root');
+    const linksToRender = root.links().filter(d => d.source.data.id !== 'virtual-root') as d3.HierarchyLink<ElectricalNode>[];
 
     const getRectBox = (d: ExtendedHierarchyNode) => {
         const w = d.width;
@@ -442,7 +442,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     const linksGroup = g.append('g').attr('class', 'links');
 
     const drag = d3.drag<SVGGElement, ExtendedHierarchyNode>()
-        .on("start", function(event, d) {
+        .on("start", function(event, d: any) {
              const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
              descendants.forEach((desc) => {
                  desc.__initialManualX = desc.data.manualX || 0;
@@ -450,7 +450,7 @@ export const Diagram: React.FC<DiagramProps> = ({
              });
              d3.select(this).attr("data-is-dragging", "false");
         })
-        .on("drag", function(event, d) {
+        .on("drag", function(event, d: any) {
              if (!d.__isDragging && (event.dx*event.dx + event.dy*event.dy) > 0) {
                  d.__totalDx = (d.__totalDx || 0) + event.dx;
                  d.__totalDy = (d.__totalDy || 0) + event.dy;
@@ -480,7 +480,7 @@ export const Diagram: React.FC<DiagramProps> = ({
                  });
              }
         })
-        .on("end", function(event, d) {
+        .on("end", function(event, d: any) {
             if (d.__isDragging) {
                 d.__isDragging = false;
                 d.__totalDx = 0; d.__totalDy = 0;
@@ -502,10 +502,10 @@ export const Diagram: React.FC<DiagramProps> = ({
     const renderLinks = (selection: any, className: string, isHitArea = false) => {
         selection
           .attr('class', className)
-          .attr('data-target-id', (d: any) => d.target.data.id)
+          .attr('data-target-id', (d: d3.HierarchyLink<ElectricalNode>) => d.target.data.id)
           .attr('d', (d: any) => linkGenerator(d.source, d.target))
           .attr('fill', 'none')
-          .each(function(d: any) {
+          .each(function(d: d3.HierarchyLink<ElectricalNode>) {
               if (isHitArea) return;
               const style = d.target.data.connectionStyle || {};
               const stroke = style.strokeColor || d.target.data.customColor || COMPONENT_CONFIG[d.target.data.type]?.color || linkColor; 
@@ -533,10 +533,10 @@ export const Diagram: React.FC<DiagramProps> = ({
     linksGroup.selectAll('path.link-extra').data(extraLinksToRender).enter().append('path').call(renderLinks, 'link-extra');
     linksGroup.selectAll('path.link-hit').data(linksToRender).enter().append('path')
         .attr('class', 'link-hit')
-        .attr('data-target-id', (d: any) => d.target.data.id)
+        .attr('data-target-id', (d: d3.HierarchyLink<ElectricalNode>) => d.target.data.id)
         .attr('d', d => linkGenerator(d.source, d.target))
         .attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 15).style('cursor', 'pointer')
-        .on('click', (e, d) => { 
+        .on('click', (e, d: d3.HierarchyLink<ElectricalNode>) => { 
             e.stopPropagation(); 
             onLinkClick(d.source.data.id, d.target.data.id); 
         });
@@ -604,25 +604,25 @@ export const Diagram: React.FC<DiagramProps> = ({
                 .attr('cx', 0)
                 .attr('cy', 0)
                 .attr('fill', d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
-                .attr('stroke', (d) => {
+                .attr('stroke', (d: any) => {
                   if (d.data.id === connectionSourceId) return '#f59e0b';
                   if (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) return '#3b82f6';
                   return d.data.type === ComponentType.SYSTEM_ROOT ? '#64748b' : secondaryTextColor;
                 })
-                .attr('stroke-width', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) ? 3 : 1.5)
-                .style('filter', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
+                .attr('stroke-width', (d: any) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) ? 3 : 1.5)
+                .style('filter', (d: any) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
         } else if (shape === 'square') {
              nodeG.append('rect')
                 .attr('class', 'node-bg')
                 .attr('width', 80).attr('height', 80)
                 .attr('x', -40).attr('y', -40).attr('rx', 4)
                 .attr('fill', d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
-                .attr('stroke', (d) => {
+                .attr('stroke', (d: any) => {
                     if (d.data.id === connectionSourceId) return '#f59e0b';
                     if (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) return '#3b82f6';
                     return secondaryTextColor;
                 })
-                .attr('stroke-width', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) ? 3 : 1.5);
+                .attr('stroke-width', (d: any) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) ? 3 : 1.5);
         } else {
              // Rectangle (Default)
              nodeG.append('rect')
@@ -630,13 +630,13 @@ export const Diagram: React.FC<DiagramProps> = ({
                 .attr('width', box.w).attr('height', box.h)
                 .attr('x', box.x).attr('y', box.y).attr('rx', 12)
                 .attr('fill', d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
-                .attr('stroke', (d) => {
+                .attr('stroke', (d: any) => {
                     if (d.data.id === connectionSourceId) return '#f59e0b'; 
                     if (d.data.id === selectedNodeId || multiSelection.has(d.data.id)) return '#3b82f6'; 
                     return d.data.type === ComponentType.SYSTEM_ROOT ? '#64748b' : secondaryTextColor;
                 })
-                .attr('stroke-width', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 3 : 1.5)
-                .style('filter', (d) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
+                .attr('stroke-width', (d: any) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 3 : 1.5)
+                .style('filter', (d: any) => (d.data.id === selectedNodeId || multiSelection.has(d.data.id) || d.data.id === connectionSourceId) ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))');
                 
              // Color Bar for Rectangle
              nodeG.append('path')
@@ -902,7 +902,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     const labelsGroup = g.append('g').attr('class', 'labels');
 
     // --- Cable Size Labels (Rendered into labelsGroup) ---
-    linksToRender.forEach((d: any) => {
+    linksToRender.forEach((d: d3.HierarchyLink<ElectricalNode>) => {
         if (d.target.data.connectionStyle?.cableSize) {
              const source = d.source as any;
              const target = d.target as any;

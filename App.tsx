@@ -832,8 +832,8 @@ export default function App() {
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
         // Ensure message is a string to avoid type errors
-        const msg = (t.dialogs && t.dialogs.diagramNotFound) ? String(t.dialogs.diagramNotFound) : "Diagram not found.";
-        alert(msg);
+        const notFoundVal = (t.dialogs && t.dialogs.diagramNotFound) ? String(t.dialogs.diagramNotFound) : "Diagram not found.";
+        alert(notFoundVal);
         return;
     }
     setShowAnalysis(true);
