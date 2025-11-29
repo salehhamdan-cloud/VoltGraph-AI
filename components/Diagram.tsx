@@ -544,7 +544,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         });
 
     // 1. Render Nodes First (So they are behind labels)
-    const nodes = g.selectAll<SVGGElement, ExtendedHierarchyNode>('g.node')
+    const nodes = g.selectAll('g.node')
       .data(nodesToRender)
       .enter()
       .append('g')
