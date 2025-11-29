@@ -900,7 +900,7 @@ export const Diagram: React.FC<DiagramProps> = ({
               box2.w - 2 * r
             } a${r},${r} 0 0 1 ${r},${r} v${6 - r}`;
           })
-          .attr('fill', (dAny) =>
+          .attr('fill', (dAny: ExtendedHierarchyNode) =>
             dAny.data.customColor ||
             COMPONENT_CONFIG[dAny.data.type]?.color ||
             '#94a3b8'
