@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
@@ -559,7 +558,7 @@ export const Diagram: React.FC<DiagramProps> = ({
             : `translate(${d.x + offsetX},${d.y + offsetY})`;
       })
       .call(drag as any)
-      .on('click', function(event, d) {
+      .on('click', function(event, d: any) {
         if (d.__isDragging) { event.stopPropagation(); return; }
         if (event.defaultPrevented) return;
         event.stopPropagation();
@@ -585,11 +584,11 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('stroke', isSource ? '#f59e0b' : (isSelected ? '#3b82f6' : secondaryTextColor));
       })
       .style('cursor', (d) => 'move')
-      .style('opacity', (d) => {
+      .style('opacity', (d: any) => {
          if (!searchMatches) return 1;
          if (searchMatches.has(d.data.id)) return 1;
          if (d.parent && d.parent.data.id !== 'virtual-root' && searchMatches.has(d.parent.data.id)) return 1;
-         if (d.children && d.children.some(c => searchMatches.has(c.data.id))) return 1;
+         if (d.children && d.children.some((c: any) => searchMatches.has(c.data.id))) return 1;
          if ((d as any)._children && (d as any)._children.some((c: any) => searchMatches.has(c.data.id))) return 1;
          return 0.2;
       });
