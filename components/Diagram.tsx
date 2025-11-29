@@ -446,8 +446,8 @@ export const Diagram: React.FC<DiagramProps> = ({
              const node = d as ExtendedHierarchyNode;
              const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
              descendants.forEach((desc: ExtendedHierarchyNode) => {
-                 desc.__initialManualX = desc.data.manualX || 0;
-                 desc.__initialManualY = desc.data.manualY || 0;
+                 desc.__initialManualX = (desc as any).data.manualX || 0;
+                 desc.__initialManualY = (desc as any).data.manualY || 0;
              });
              d3.select(this).attr("data-is-dragging", "false");
         })
@@ -490,9 +490,9 @@ export const Diagram: React.FC<DiagramProps> = ({
                 const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
                 descendants.forEach((desc: ExtendedHierarchyNode) => {
                     updates.push({
-                        id: desc.data.id,
-                        x: desc.data.manualX || 0,
-                        y: desc.data.manualY || 0
+                        id: (desc as any).data.id,
+                        x: (desc as any).data.manualX || 0,
+                        y: (desc as any).data.manualY || 0
                     });
                 });
                 if (onNodeMove) {
@@ -535,8 +535,8 @@ export const Diagram: React.FC<DiagramProps> = ({
     linksGroup.selectAll('path.link-extra').data(extraLinksToRender).enter().append('path').call(renderLinks, 'link-extra');
     linksGroup.selectAll('path.link-hit').data(linksToRender).enter().append('path')
         .attr('class', 'link-hit')
-        .attr('data-target-id', (d: d3.HierarchyLink<ElectricalNode>) => d.target.data.id)
-        .attr('d', d => linkGenerator(d.source, d.target))
+        .attr('data-target-id', (d: any) => d.target.data.id)
+        .attr('d', (d: any) => linkGenerator(d.source, d.target))
         .attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 15).style('cursor', 'pointer')
         .on('click', (e, d: d3.HierarchyLink<ElectricalNode>) => { 
             e.stopPropagation(); 
@@ -904,9 +904,12 @@ export const Diagram: React.FC<DiagramProps> = ({
     const labelsGroup = g.append('g').attr('class', 'labels');
 
     // --- Cable Size Labels (Rendered into labelsGroup) ---
-    linksToRender.forEach((linkItem) => {
-        const d = linkItem as any;
-        if (d.target && d.target.data && d.target.data.connectionStyle?.cableSize) {
+    linksToRender.forEach((linkItem: any) => {
+        const d = linkItem;
+        // Cast target to any to access data safely without TypeScript errors
+        const targetNode = d.target as any;
+        
+        if (targetNode && targetNode.data && targetNode.data.connectionStyle?.cableSize) {
              const source = d.source as any;
              const target = d.target as any;
              
@@ -959,8 +962,8 @@ export const Diagram: React.FC<DiagramProps> = ({
                      .style('pointer-events', 'none');
                  
                  // Link Color for background
-                 const style = d.target.data.connectionStyle || {};
-                 const linkStroke = style.strokeColor || d.target.data.customColor || COMPONENT_CONFIG[d.target.data.type]?.color || linkColor;
+                 const style = targetNode.data.connectionStyle || {};
+                 const linkStroke = style.strokeColor || targetNode.data.customColor || COMPONENT_CONFIG[targetNode.data.type]?.color || linkColor;
 
                  // Background for text (rect) - initially empty, sized later
                  const bgRect = labelGroup.append('rect')
@@ -976,7 +979,7 @@ export const Diagram: React.FC<DiagramProps> = ({
                      .style('font-size', '10px')
                      .style('font-weight', 'bold')
                      .style('fill', '#ffffff') // White text
-                     .text(d.target.data.connectionStyle.cableSize);
+                     .text(targetNode.data.connectionStyle.cableSize);
                      
                  // Adjust rect size based on text bounding box
                  const bbox = text.node()?.getBBox();
