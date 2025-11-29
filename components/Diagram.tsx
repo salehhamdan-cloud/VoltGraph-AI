@@ -548,9 +548,9 @@ export const Diagram: React.FC<DiagramProps> = ({
       .data(nodesToRender)
       .enter()
       .append('g')
-      .attr('class', (d) => `node group ${d.data.id === selectedNodeId || multiSelection.has(d.data.id) ? 'selected' : ''}`)
-      .attr('data-id', (d) => d.data.id) 
-      .attr('transform', (d) => {
+      .attr('class', (d: ExtendedHierarchyNode) => `node group ${d.data.id === selectedNodeId || multiSelection.has(d.data.id) ? 'selected' : ''}`)
+      .attr('data-id', (d: ExtendedHierarchyNode) => d.data.id) 
+      .attr('transform', (d: ExtendedHierarchyNode) => {
           const offsetX = d.data.manualX || 0;
           const offsetY = d.data.manualY || 0;
           return orientation === 'horizontal' 
@@ -564,7 +564,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         event.stopPropagation();
         onNodeClick(d.data, event.shiftKey);
       })
-      .on('mouseenter', function(event, d) {
+      .on('mouseenter', function(event, d: ExtendedHierarchyNode) {
           const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
           const isSource = d.data.id === connectionSourceId;
           const el = d3.select(this);
@@ -574,7 +574,7 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('fill', isDark ? '#334155' : '#e2e8f0')
             .attr('stroke', isSource ? '#f59e0b' : (isSelected ? '#3b82f6' : '#64748b'));
       })
-      .on('mouseleave', function(event, d) {
+      .on('mouseleave', function(event, d: ExtendedHierarchyNode) {
           const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
           const isSource = d.data.id === connectionSourceId;
           const el = d3.select(this);
@@ -594,7 +594,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       });
 
     // Node Shape Rendering Logic
-    nodes.each(function(d) {
+    nodes.each(function(d: ExtendedHierarchyNode) {
         const nodeG = d3.select(this);
         const shape = d.data.shape || 'rectangle';
         const box = getRectBox(d);
@@ -904,16 +904,20 @@ export const Diagram: React.FC<DiagramProps> = ({
     const labelsGroup = g.append('g').attr('class', 'labels');
 
     // --- Cable Size Labels (Rendered into labelsGroup) ---
-    linksToRender.forEach((d: any) => {
-        if (d.target.data.connectionStyle?.cableSize) {
+    linksToRender.forEach((linkItem) => {
+        const d = linkItem as any;
+        if (d.target && d.target.data && d.target.data.connectionStyle?.cableSize) {
              const source = d.source as any;
              const target = d.target as any;
              
              // Calculate coordinates including drag offsets
-             const sXOffset = source.data.manualX || 0;
-             const sYOffset = source.data.manualY || 0;
-             const tXOffset = target.data.manualX || 0;
-             const tYOffset = target.data.manualY || 0;
+             const sData = source.data || {};
+             const tData = target.data || {};
+             
+             const sXOffset = sData.manualX || 0;
+             const sYOffset = sData.manualY || 0;
+             const tXOffset = tData.manualX || 0;
+             const tYOffset = tData.manualY || 0;
              
              let srcX, srcY, tgtX, tgtY;
              
@@ -990,16 +994,22 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     // --- Visual Link Disconnect Icon (Rendered into labelsGroup) ---
     if (selectedLinkId) {
-        const selectedLink: any = linksToRender.find((d: any) => d.target.data.id === selectedLinkId) || extraLinksToRender.find((d: any) => d.target.data.id === selectedLinkId);
+        // Explicitly check properties with 'any' cast to avoid TS unknown errors
+        const linkFound = linksToRender.find((d: any) => d.target && d.target.data && d.target.data.id === selectedLinkId);
+        const extraFound = extraLinksToRender.find((d: any) => d.target && d.target.data && d.target.data.id === selectedLinkId);
+        const selectedLink = (linkFound || extraFound) as any;
         
         if (selectedLink) {
              const source = selectedLink.source as any;
              const target = selectedLink.target as any;
              
-             const sXOffset = source.data.manualX || 0;
-             const sYOffset = source.data.manualY || 0;
-             const tXOffset = target.data.manualX || 0;
-             const tYOffset = target.data.manualY || 0;
+             const sData = source.data || {};
+             const tData = target.data || {};
+
+             const sXOffset = sData.manualX || 0;
+             const sYOffset = sData.manualY || 0;
+             const tXOffset = tData.manualX || 0;
+             const tYOffset = tData.manualY || 0;
              
              let srcX, srcY, tgtX, tgtY;
              
