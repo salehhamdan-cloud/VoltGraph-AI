@@ -1440,15 +1440,38 @@ export default function App() {
         )}
 
         <div className="flex-1 relative p-4 flex flex-col bg-slate-950/50 overflow-hidden">
-            {/* Clean View Exit Button */}
+            {/* Clean View Controls */}
             {isCleanView && (
-                <button 
-                    onClick={() => setIsCleanView(false)}
-                    className="absolute top-4 right-4 z-50 px-4 py-2 bg-slate-800/80 backdrop-blur border border-slate-700 rounded-full text-white text-sm hover:bg-slate-700 transition-colors flex items-center gap-2 shadow-lg"
-                >
-                    <span className="material-icons-round text-base">fullscreen_exit</span>
-                    {t.exitCleanView}
-                </button>
+                <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-slate-700 shadow-2xl">
+                    <button
+                        onClick={() => setOrientation(prev => prev === 'horizontal' ? 'vertical' : 'horizontal')}
+                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+                        title={t.toggleOrientation}
+                    >
+                        <span className="material-icons-round transform transition-transform duration-300" style={{ rotate: orientation === 'vertical' ? '90deg' : '0deg' }}>schema</span>
+                    </button>
+
+                    <div className="w-px h-6 bg-slate-700"></div>
+
+                    <button
+                        onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
+                        className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
+                        title={t.toggleTheme}
+                    >
+                        <span className="material-icons-round">{theme === 'light' ? 'dark_mode' : 'light_mode'}</span>
+                    </button>
+
+                     <div className="w-px h-6 bg-slate-700"></div>
+
+                    <button
+                        onClick={() => setIsCleanView(false)}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition-colors flex items-center gap-2 font-medium"
+                        title={t.exitCleanView}
+                    >
+                        <span className="material-icons-round text-base">fullscreen_exit</span>
+                        {t.exitCleanView}
+                    </button>
+                </div>
             )}
 
             {!isCleanView && (
