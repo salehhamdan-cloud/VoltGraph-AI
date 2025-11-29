@@ -3,6 +3,7 @@ import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ElectricalNode, AnalysisResult } from "../types";
 
 const MODEL_NAME = "gemini-2.5-flash";
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // Define the response schema for structured analysis
 const analysisSchema: Schema = {
@@ -32,12 +33,12 @@ const analysisSchema: Schema = {
 };
 
 export const analyzeCircuit = async (nodes: ElectricalNode[]): Promise<AnalysisResult> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing");
+  if (!GEMINI_API_KEY) {
+    throw new Error("Gemini API key is missing. Please set VITE_GEMINI_API_KEY in your environment.");
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
     const prompt = `
       Analyze the following electrical single-line diagram structure (represented as a list of component trees) for an industrial or commercial setup.

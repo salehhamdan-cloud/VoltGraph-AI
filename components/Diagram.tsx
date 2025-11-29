@@ -47,6 +47,11 @@ type ExtendedHierarchyNode = Omit<d3.HierarchyPointNode<ElectricalNode>, 'parent
   data: ElectricalNode;
 };
 
+type ExtendedHierarchyLink = {
+  source: ExtendedHierarchyNode;
+  target: ExtendedHierarchyNode;
+};
+
 export const Diagram: React.FC<DiagramProps> = ({ 
     data, 
     onNodeClick,
@@ -385,7 +390,16 @@ export const Diagram: React.FC<DiagramProps> = ({
     treeLayout(root);
 
     const nodesToRender = root.descendants().filter(d => d.depth > 0) as unknown as ExtendedHierarchyNode[];
-    const linksToRender = root.links().filter(d => d.source.data.id !== 'virtual-root');
+    const nodeLookup = new Map<string, ExtendedHierarchyNode>();
+    nodesToRender.forEach((node) => nodeLookup.set(node.data.id, node));
+
+    const linksToRender: ExtendedHierarchyLink[] = root
+        .links()
+        .filter((d) => d.source.data.id !== 'virtual-root')
+        .map((link) => ({
+            source: nodeLookup.get(link.source.data.id) || (link.source as unknown as ExtendedHierarchyNode),
+            target: nodeLookup.get(link.target.data.id) || (link.target as unknown as ExtendedHierarchyNode)
+        }));
 
     const getRectBox = (d: ExtendedHierarchyNode) => {
         const w = d.width;
@@ -397,7 +411,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     };
 
-    const linkGenerator = (source: any, target: any) => {
+    const linkGenerator = (source: ExtendedHierarchyNode, target: ExtendedHierarchyNode) => {
         const sXOffset = source.data.manualX || 0;
         const sYOffset = source.data.manualY || 0;
         const tXOffset = target.data.manualX || 0;
@@ -418,9 +432,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     };
 
-    const extraLinksToRender: { source: ExtendedHierarchyNode; target: ExtendedHierarchyNode; }[] = [];
-    const nodeLookup = new Map<string, ExtendedHierarchyNode>();
-    nodesToRender.forEach(d => nodeLookup.set(d.data.id, d));
+    const extraLinksToRender: ExtendedHierarchyLink[] = [];
 
     nodesToRender.forEach(d => {
         if (d.data.extraConnections) {
@@ -493,16 +505,20 @@ export const Diagram: React.FC<DiagramProps> = ({
             }
         });
 
-    const renderLinks = (selection: any, className: string, isHitArea = false) => {
+    const renderLinks = (
+        selection: d3.Selection<SVGPathElement, ExtendedHierarchyLink, SVGGElement, unknown>,
+        className: string,
+        isHitArea = false
+    ) => {
         selection
           .attr('class', className)
-          .attr('data-target-id', (d: any) => d.target.data.id)
-          .attr('d', (d: any) => linkGenerator(d.source, d.target))
+          .attr('data-target-id', (d) => d.target.data.id)
+          .attr('d', (d) => linkGenerator(d.source, d.target))
           .attr('fill', 'none')
-          .each(function(d: any) {
+          .each(function(d) {
               if (isHitArea) return;
               const style = d.target.data.connectionStyle || {};
-              const stroke = style.strokeColor || d.target.data.customColor || COMPONENT_CONFIG[d.target.data.type]?.color || linkColor; 
+              const stroke = style.strokeColor || d.target.data.customColor || COMPONENT_CONFIG[d.target.data.type]?.color || linkColor;
               const isSelected = d.target.data.id === selectedLinkId;
               
               if (className === 'link-extra') {
@@ -523,20 +539,31 @@ export const Diagram: React.FC<DiagramProps> = ({
           });
     };
 
-    const linkPathSelection = linksGroup.selectAll('path.link-visible').data(linksToRender).enter().append('path').call(renderLinks, 'link-visible');
-    linksGroup.selectAll('path.link-extra').data(extraLinksToRender).enter().append('path').call(renderLinks, 'link-extra');
-    linksGroup.selectAll('path.link-hit').data(linksToRender).enter().append('path')
+    const linkPathSelection = linksGroup.selectAll<SVGPathElement, ExtendedHierarchyLink>('path.link-visible')
+        .data(linksToRender)
+        .enter()
+        .append('path')
+        .call(renderLinks, 'link-visible');
+    linksGroup.selectAll<SVGPathElement, ExtendedHierarchyLink>('path.link-extra')
+        .data(extraLinksToRender)
+        .enter()
+        .append('path')
+        .call(renderLinks, 'link-extra');
+    linksGroup.selectAll<SVGPathElement, ExtendedHierarchyLink>('path.link-hit')
+        .data(linksToRender)
+        .enter()
+        .append('path')
         .attr('class', 'link-hit')
-        .attr('data-target-id', (d: any) => d.target.data.id)
-        .attr('d', d => linkGenerator(d.source, d.target))
+        .attr('data-target-id', (d) => d.target.data.id)
+        .attr('d', (d) => linkGenerator(d.source, d.target))
         .attr('fill', 'none').attr('stroke', 'transparent').attr('stroke-width', 15).style('cursor', 'pointer')
-        .on('click', (e, d) => { 
-            e.stopPropagation(); 
-            onLinkClick(d.source.data.id, d.target.data.id); 
+        .on('click', (e, d) => {
+            e.stopPropagation();
+            onLinkClick(d.source.data.id, d.target.data.id);
         });
 
     // 1. Render Nodes First (So they are behind labels)
-    const nodes = g.selectAll('g.node')
+    const nodes = g.selectAll<SVGGElement, ExtendedHierarchyNode>('g.node')
       .data(nodesToRender)
       .enter()
       .append('g')
@@ -586,8 +613,8 @@ export const Diagram: React.FC<DiagramProps> = ({
       });
 
     // Node Shape Rendering Logic
-    nodes.each(function(d) {
-        const nodeG = d3.select(this);
+    nodes.each(function(d: ExtendedHierarchyNode) {
+        const nodeG = d3.select<SVGGElement, ExtendedHierarchyNode>(this);
         const shape = d.data.shape || 'rectangle';
         const box = getRectBox(d);
         
@@ -655,8 +682,8 @@ export const Diagram: React.FC<DiagramProps> = ({
         });
 
     // Icon / Custom Image
-    contentG.each(function(d) {
-        const el = d3.select(this);
+    contentG.each(function(d: ExtendedHierarchyNode) {
+        const el = d3.select<SVGGElement, ExtendedHierarchyNode>(this);
         const iconColor = d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8';
         
         if (d.data.customImage) {
@@ -682,8 +709,8 @@ export const Diagram: React.FC<DiagramProps> = ({
     });
 
     // Text Labels (Only for Rectangle for full details, simple name for others)
-    contentG.each(function(d) {
-        const el = d3.select(this);
+    contentG.each(function(d: ExtendedHierarchyNode) {
+        const el = d3.select<SVGGElement, ExtendedHierarchyNode>(this);
         const shape = d.data.shape || 'rectangle';
         
         if (shape === 'circle' || shape === 'square') {
