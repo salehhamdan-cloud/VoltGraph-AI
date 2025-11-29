@@ -1436,22 +1436,21 @@ export const Diagram: React.FC<DiagramProps> = ({
       }
     });
 
-    // Disconnect button on selected link
+    // --- Visual Link Disconnect Icon (Rendered into labelsGroup) ---
     if (selectedLinkId) {
-      const linkFound =
-        linksToRender.find(
-          (d: any) => d.target && d.target.data && d.target.data.id === selectedLinkId
-        ) || null;
-      const extraFound =
-        extraLinksToRender.find(
-          (d: any) => d.target && d.target.data && d.target.data.id === selectedLinkId
-        ) || null;
+      // نبحث عن اللينك المختار في اللينكات العادية والإضافية
+      const linkFound = linksToRender.find(
+        (d: DiagramLink) => d.target.data.id === selectedLinkId
+      );
+      const extraFound = extraLinksToRender.find(
+        (d: DiagramLink) => d.target.data.id === selectedLinkId
+      );
 
-      const selectedLink = linkFound ?? extraFound;
+      const selectedLink: DiagramLink | undefined = linkFound ?? extraFound;
 
       if (selectedLink) {
-        const source = selectedLink.source as ExtendedHierarchyNode;
-        const target = selectedLink.target as ExtendedHierarchyNode;
+        const source = selectedLink.source;
+        const target = selectedLink.target;
 
         const sData = source.data;
         const tData = target.data;
@@ -1512,6 +1511,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
       }
     }
+
 
     // Dynamic content bounds
     let maxY = 600;
