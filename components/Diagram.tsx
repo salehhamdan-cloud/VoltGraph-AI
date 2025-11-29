@@ -468,8 +468,8 @@ export const Diagram: React.FC<DiagramProps> = ({
       .links()
       .filter((d) => d.source.data.id !== 'virtual-root')
       .map((d) => ({
-        source: d.source as ExtendedHierarchyNode,
-        target: d.target as ExtendedHierarchyNode,
+        source: d.source as unknown as ExtendedHierarchyNode,
+        target: d.target as unknown as ExtendedHierarchyNode,
       }));
 
     const getRectBox = (d: ExtendedHierarchyNode) => {
@@ -773,7 +773,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           searchMatches.has(d.parent.data.id)
         )
           return 1;
-        if (d.children && d.children.some((c) => searchMatches.has(c.data.id)))
+        if (d.children && d.children.some((c: any) => searchMatches.has(c.data.id)))
           return 1;
         if (
           (d as any)._children &&
@@ -1440,18 +1440,18 @@ export const Diagram: React.FC<DiagramProps> = ({
     if (selectedLinkId) {
       const linkFound =
         linksToRender.find(
-          (d) => d.target.data.id === selectedLinkId
+          (d: any) => d.target && d.target.data && d.target.data.id === selectedLinkId
         ) || null;
       const extraFound =
         extraLinksToRender.find(
-          (d) => d.target.data.id === selectedLinkId
+          (d: any) => d.target && d.target.data && d.target.data.id === selectedLinkId
         ) || null;
 
       const selectedLink = linkFound ?? extraFound;
 
       if (selectedLink) {
-        const source = selectedLink.source;
-        const target = selectedLink.target;
+        const source = selectedLink.source as ExtendedHierarchyNode;
+        const target = selectedLink.target as ExtendedHierarchyNode;
 
         const sData = source.data;
         const tData = target.data;
