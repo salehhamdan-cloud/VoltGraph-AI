@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
@@ -442,26 +443,28 @@ export const Diagram: React.FC<DiagramProps> = ({
     const linksGroup = g.append('g').attr('class', 'links');
 
     const drag = d3.drag<SVGGElement, ExtendedHierarchyNode>()
-        .on("start", function(event, d: any) {
-             const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
-             descendants.forEach((desc) => {
+        .on("start", function(event, d) {
+             const node = d as ExtendedHierarchyNode;
+             const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+             descendants.forEach((desc: ExtendedHierarchyNode) => {
                  desc.__initialManualX = desc.data.manualX || 0;
                  desc.__initialManualY = desc.data.manualY || 0;
              });
              d3.select(this).attr("data-is-dragging", "false");
         })
-        .on("drag", function(event, d: any) {
-             if (!d.__isDragging && (event.dx*event.dx + event.dy*event.dy) > 0) {
-                 d.__totalDx = (d.__totalDx || 0) + event.dx;
-                 d.__totalDy = (d.__totalDy || 0) + event.dy;
-                 if (((d.__totalDx)**2 + (d.__totalDy)**2 > 16)) {
-                     d.__isDragging = true;
+        .on("drag", function(event, d) {
+             const node = d as ExtendedHierarchyNode;
+             if (!node.__isDragging && (event.dx*event.dx + event.dy*event.dy) > 0) {
+                 node.__totalDx = (node.__totalDx || 0) + event.dx;
+                 node.__totalDy = (node.__totalDy || 0) + event.dy;
+                 if (((node.__totalDx)**2 + (node.__totalDy)**2 > 16)) {
+                     node.__isDragging = true;
                  }
              }
 
-             if (d.__isDragging) {
-                 const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
-                 descendants.forEach((desc) => {
+             if (node.__isDragging) {
+                 const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+                 descendants.forEach((desc: ExtendedHierarchyNode) => {
                      const currentX = (desc.data.manualX || 0) + event.dx;
                      const currentY = (desc.data.manualY || 0) + event.dy;
                      desc.data.manualX = currentX;
@@ -476,17 +479,17 @@ export const Diagram: React.FC<DiagramProps> = ({
                      } else {
                          el.attr("transform", `translate(${desc.x + offsetX},${desc.y + offsetY})`);
                      }
-                     // Update links during drag (simplified refresh would be costly)
                  });
              }
         })
-        .on("end", function(event, d: any) {
-            if (d.__isDragging) {
-                d.__isDragging = false;
-                d.__totalDx = 0; d.__totalDy = 0;
+        .on("end", function(event, d) {
+            const node = d as ExtendedHierarchyNode;
+            if (node.__isDragging) {
+                node.__isDragging = false;
+                node.__totalDx = 0; node.__totalDy = 0;
                 const updates: {id: string, x: number, y: number}[] = [];
-                const descendants = d.descendants() as unknown as ExtendedHierarchyNode[];
-                descendants.forEach((desc) => {
+                const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+                descendants.forEach((desc: ExtendedHierarchyNode) => {
                     updates.push({
                         id: desc.data.id,
                         x: desc.data.manualX || 0,
@@ -902,7 +905,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     const labelsGroup = g.append('g').attr('class', 'labels');
 
     // --- Cable Size Labels (Rendered into labelsGroup) ---
-    linksToRender.forEach((d: d3.HierarchyLink<ElectricalNode>) => {
+    linksToRender.forEach((d: any) => {
         if (d.target.data.connectionStyle?.cableSize) {
              const source = d.source as any;
              const target = d.target as any;
@@ -988,7 +991,7 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     // --- Visual Link Disconnect Icon (Rendered into labelsGroup) ---
     if (selectedLinkId) {
-        const selectedLink = linksToRender.find(d => d.target.data.id === selectedLinkId) || extraLinksToRender.find(d => d.target.data.id === selectedLinkId);
+        const selectedLink: any = linksToRender.find((d: any) => d.target.data.id === selectedLinkId) || extraLinksToRender.find((d: any) => d.target.data.id === selectedLinkId);
         
         if (selectedLink) {
              const source = selectedLink.source as any;
