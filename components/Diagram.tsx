@@ -464,14 +464,14 @@ export const Diagram: React.FC<DiagramProps> = ({
              if (node.__isDragging) {
                  const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
                  descendants.forEach((desc: ExtendedHierarchyNode) => {
-                     const currentX = (desc.data.manualX || 0) + event.dx;
-                     const currentY = (desc.data.manualY || 0) + event.dy;
-                     desc.data.manualX = currentX;
-                     desc.data.manualY = currentY;
+                     const currentX = ((desc as any).data.manualX || 0) + event.dx;
+                     const currentY = ((desc as any).data.manualY || 0) + event.dy;
+                     (desc as any).data.manualX = currentX;
+                     (desc as any).data.manualY = currentY;
                      
-                     const el = g.select(`g.node[data-id="${desc.data.id}"]`);
-                     const offsetX = desc.data.manualX || 0;
-                     const offsetY = desc.data.manualY || 0;
+                     const el = g.select(`g.node[data-id="${(desc as any).data.id}"]`);
+                     const offsetX = (desc as any).data.manualX || 0;
+                     const offsetY = (desc as any).data.manualY || 0;
                      
                      if (orientation === 'horizontal') {
                          el.attr("transform", `translate(${desc.y + offsetX},${desc.x + offsetY})`);
@@ -504,10 +504,10 @@ export const Diagram: React.FC<DiagramProps> = ({
     const renderLinks = (selection: any, className: string, isHitArea = false) => {
         selection
           .attr('class', className)
-          .attr('data-target-id', (d: d3.HierarchyLink<ElectricalNode>) => d.target.data.id)
+          .attr('data-target-id', (d: any) => d.target.data.id)
           .attr('d', (d: any) => linkGenerator(d.source, d.target))
           .attr('fill', 'none')
-          .each(function(d: d3.HierarchyLink<ElectricalNode>) {
+          .each(function(d: any) {
               if (isHitArea) return;
               const style = d.target.data.connectionStyle || {};
               const stroke = style.strokeColor || d.target.data.customColor || COMPONENT_CONFIG[d.target.data.type]?.color || linkColor; 
