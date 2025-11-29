@@ -287,6 +287,8 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     });
 
+    const tempText = svg.append('text').style('font-size', '9px').style('font-weight', 'bold').style('visibility', 'hidden');
+
     const getNodeSize = (d: d3.HierarchyNode<ElectricalNode>) => {
         if (d.data.id === 'virtual-root') return { w: 1, h: 1 };
         
@@ -317,15 +319,19 @@ export const Diagram: React.FC<DiagramProps> = ({
 
         let badgeWidth = 0;
         if (d.data.hasMeter) {
-             const mTextW = (d.data.meterNumber?.length || 0) * 8 + 10;
-             badgeWidth += 24 + (d.data.meterNumber ? mTextW : 0);
+             tempText.text(d.data.meterNumber || '');
+             const width = tempText.node()?.getComputedTextLength() || 0;
+             const totalW = 20 + (d.data.meterNumber ? width + 6 : 0);
+             badgeWidth += totalW;
         }
         if (d.data.hasGeneratorConnection) {
-             const gTextW = (d.data.generatorName?.length || 0) * 8 + 10;
-             badgeWidth += 24 + (d.data.generatorName ? gTextW : 0);
+             tempText.text(d.data.generatorName || '');
+             const width = tempText.node()?.getComputedTextLength() || 0;
+             const totalW = 20 + (d.data.generatorName ? width + 6 : 0);
+             badgeWidth += totalW;
         }
         if (d.data.hasMeter && d.data.hasGeneratorConnection) {
-            badgeWidth += 30; 
+            badgeWidth += 5; // Minimal spacing between badges
         }
 
         const contentWidth = Math.max(nameLen, typeLen, specLen, modelLen, descLen, badgeWidth, 90); 
@@ -756,39 +762,96 @@ export const Diagram: React.FC<DiagramProps> = ({
         const box = getRectBox(d); return box.y + box.h - 24; 
     };
 
+    // Render Meter Badges with Exact Width
     nodes.filter(d => !!d.data.hasMeter).append('g')
-        .attr('transform', d => {
-            if (d.data.shape && d.data.shape !== 'rectangle') return `translate(25, -35)`;
-            return `translate(${getRectBox(d).x + 8}, ${getBadgeBaseY(d)})`
-        })
-        .call(g => {
-             const textWidth = (d: any) => (d.data.meterNumber?.length || 0) * 8 + 10;
-             const totalWidth = (d: any) => 24 + (d.data.meterNumber ? textWidth(d) : 0);
-             g.append('rect').attr('height', 18).attr('width', totalWidth).attr('rx', 9)
-                .attr('fill', isDark ? '#1e3a8a' : '#dbeafe').attr('stroke', '#3b82f6').attr('stroke-width', 0.5);
-             g.append('path').attr('d', ICON_PATHS['speed']).attr('transform', 'translate(3, 3) scale(0.5)').attr('fill', '#3b82f6');
-             g.append('text').attr('x', 20).attr('y', 9).attr('dominant-baseline', 'central').attr('text-anchor', 'start')
-                .style('font-size', '9px').style('font-weight', 'bold').style('fill', '#3b82f6').style('direction', 'ltr')
-                .text(d => d.data.meterNumber || '');
+        .each(function(d) {
+            const g = d3.select(this);
+            const iconSize = 18;
+            
+            // 1. Render Text first to measure
+            const text = g.append('text')
+                .attr('y', 9)
+                .attr('dominant-baseline', 'central')
+                .style('font-size', '9px')
+                .style('font-weight', 'bold')
+                .style('fill', '#3b82f6')
+                .style('direction', 'ltr') // Keep IDs LTR
+                .text(d.data.meterNumber || '');
+            
+            const textLen = text.node()?.getComputedTextLength() || 0;
+            const totalWidth = 20 + (d.data.meterNumber ? textLen + 6 : 0); // 20px for icon area + text + padding
+
+            // 2. Position Text
+            text.attr('x', 20); // Icon takes ~20px space
+
+            // 3. Render Rect (insert before text)
+            g.insert('rect', 'text')
+                .attr('height', 18)
+                .attr('width', totalWidth)
+                .attr('rx', 9)
+                .attr('fill', isDark ? '#1e3a8a' : '#dbeafe')
+                .attr('stroke', '#3b82f6')
+                .attr('stroke-width', 0.5);
+
+            // 4. Render Icon
+            g.append('path')
+                .attr('d', ICON_PATHS['speed'])
+                .attr('transform', 'translate(3, 3) scale(0.5)')
+                .attr('fill', '#3b82f6');
+            
+            // 5. Apply Transform (Position on Node)
+            if (d.data.shape && d.data.shape !== 'rectangle') {
+                g.attr('transform', `translate(25, -35)`);
+            } else {
+                g.attr('transform', `translate(${getRectBox(d).x + 8}, ${getBadgeBaseY(d)})`);
+            }
         });
 
+    // Render Generator Badges with Exact Width and Positioning
     nodes.filter(d => !!d.data.hasGeneratorConnection).append('g')
-        .attr('transform', function(d) {
-             const textWidth = (d.data.generatorName?.length || 0) * 8 + 10;
-             const totalWidth = 24 + (d.data.generatorName ? textWidth : 0);
-             if (d.data.shape && d.data.shape !== 'rectangle') return `translate(-${totalWidth + 25}, -35)`;
-             const box = getRectBox(d); const y = getBadgeBaseY(d);
-             return `translate(${box.x + box.w - totalWidth - 8}, ${y})`;
-        })
-        .call(g => {
-             const textWidth = (d: any) => (d.data.generatorName?.length || 0) * 8 + 10;
-             const totalWidth = (d: any) => 24 + (d.data.generatorName ? textWidth(d) : 0);
-             g.append('rect').attr('height', 18).attr('width', totalWidth).attr('rx', 9)
-                .attr('fill', isDark ? '#7f1d1d' : '#fee2e2').attr('stroke', '#ef4444').attr('stroke-width', 0.5);
-             g.append('path').attr('d', ICON_PATHS['letter_g']).attr('transform', 'translate(3, 3) scale(0.5)').attr('fill', '#ef4444');
-             g.append('text').attr('x', 20).attr('y', 9).attr('dominant-baseline', 'central').attr('text-anchor', 'start')
-                .style('font-size', '9px').style('font-weight', 'bold').style('fill', '#ef4444').style('direction', 'ltr')
-                .text(d => d.data.generatorName || '');
+        .each(function(d) {
+            const g = d3.select(this);
+            
+            // 1. Text
+            const text = g.append('text')
+                .attr('y', 9)
+                .attr('dominant-baseline', 'central')
+                .style('font-size', '9px')
+                .style('font-weight', 'bold')
+                .style('fill', '#ef4444')
+                .style('direction', 'ltr')
+                .text(d.data.generatorName || '');
+            
+            const textLen = text.node()?.getComputedTextLength() || 0;
+            const totalWidth = 20 + (d.data.generatorName ? textLen + 6 : 0);
+
+            // 2. Position Text
+            text.attr('x', 20);
+
+            // 3. Rect
+            g.insert('rect', 'text')
+                .attr('height', 18)
+                .attr('width', totalWidth)
+                .attr('rx', 9)
+                .attr('fill', isDark ? '#7f1d1d' : '#fee2e2')
+                .attr('stroke', '#ef4444')
+                .attr('stroke-width', 0.5);
+
+            // 4. Icon
+            g.append('path')
+                .attr('d', ICON_PATHS['letter_g'])
+                .attr('transform', 'translate(3, 3) scale(0.5)')
+                .attr('fill', '#ef4444');
+
+            // 5. Transform (Position on Node - Depends on Width)
+            if (d.data.shape && d.data.shape !== 'rectangle') {
+                g.attr('transform', `translate(-${totalWidth + 25}, -35)`);
+            } else {
+                const box = getRectBox(d);
+                const y = getBadgeBaseY(d);
+                // Right align: Box Right Edge - TotalWidth - Padding
+                g.attr('transform', `translate(${box.x + box.w - totalWidth - 8}, ${y})`);
+            }
         });
 
     nodes.append('g')

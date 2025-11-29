@@ -665,7 +665,7 @@ export default function App() {
         }
         const newNode: ElectricalNode = {
             id: generateId(String(data.type)),
-            name: data.name || data.type,
+            name: data.name || String(data.type),
             type: data.type,
             componentNumber: data.componentNumber,
             model: data.model,

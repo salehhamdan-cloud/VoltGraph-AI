@@ -665,7 +665,7 @@ export default function App() {
         }
         const newNode: ElectricalNode = {
             id: generateId(String(data.type)),
-            name: data.name || data.type,
+            name: data.name || String(data.type),
             type: data.type,
             componentNumber: data.componentNumber,
             model: data.model,
@@ -832,8 +832,8 @@ export default function App() {
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
         // Ensure message is a string to avoid type errors
-        const msg = (t.dialogs && t.dialogs.diagramNotFound) ? String(t.dialogs.diagramNotFound) : "Diagram not found.";
-        alert(msg);
+        const notFoundVal = (t.dialogs && t.dialogs.diagramNotFound) ? String(t.dialogs.diagramNotFound) : "Diagram not found.";
+        alert(notFoundVal);
         return;
     }
     setShowAnalysis(true);
