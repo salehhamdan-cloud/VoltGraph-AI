@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
@@ -29,6 +31,8 @@ interface DiagramProps {
   t: any;
   language: string;
   theme: 'light' | 'dark';
+  isCleanView?: boolean;
+  activeFilter?: 'none' | 'meter' | 'generator' | string;
 }
 
 type ExtendedHierarchyNode = Omit<
@@ -81,6 +85,8 @@ export const Diagram: React.FC<DiagramProps> = ({
   t,
   language,
   theme,
+  isCleanView = false,
+  activeFilter = 'none'
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -149,6 +155,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     // Background click handler
     svg.on('click', (event) => {
       if (event.defaultPrevented) return; // Zoom drag
+      if (isCleanView) return; // Disable selection in clean view
       onBackgroundClick?.();
     });
 
@@ -166,6 +173,22 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('cy', 2)
       .attr('r', 1)
       .attr('fill', dotColor);
+      
+    // Glow filter for Clean View highlighting
+    const filter = defs.append('filter')
+        .attr('id', 'filter-glow')
+        .attr('x', '-50%')
+        .attr('y', '-50%')
+        .attr('width', '200%')
+        .attr('height', '200%');
+    
+    filter.append('feGaussianBlur')
+        .attr('stdDeviation', '4')
+        .attr('result', 'coloredBlur');
+
+    const feMerge = filter.append('feMerge');
+    feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+    feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
     svg
       .style('background-color', bgColor)
@@ -184,8 +207,9 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('stroke', secondaryTextColor)
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '5,5')
-        .style('cursor', 'pointer')
+        .style('cursor', isCleanView ? 'default' : 'pointer')
         .on('click', (e) => {
+          if (isCleanView) return;
           e.stopPropagation();
           onAddRoot && onAddRoot();
         });
@@ -217,8 +241,9 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('fill', 'transparent')
         .attr('stroke', secondaryTextColor)
         .attr('stroke-dasharray', '4,4')
-        .style('cursor', 'pointer')
+        .style('cursor', isCleanView ? 'default' : 'pointer')
         .on('click', (e) => {
+          if (isCleanView) return;
           e.stopPropagation();
           onAddGenerator && onAddGenerator();
         });
@@ -523,6 +548,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     const drag = d3
       .drag<SVGGElement, ExtendedHierarchyNode>()
       .on('start', function (event, d) {
+        if (isCleanView) return; // Disable drag in Clean View
         const node = d as ExtendedHierarchyNode;
         const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
         descendants.forEach((desc: ExtendedHierarchyNode) => {
@@ -532,6 +558,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         d3.select(this).attr('data-is-dragging', 'false');
       })
       .on('drag', function (event, d) {
+        if (isCleanView) return; // Disable drag in Clean View
         const node = d as ExtendedHierarchyNode;
         if (!node.__isDragging && event.dx * event.dx + event.dy * event.dy > 0) {
           node.__totalDx = (node.__totalDx || 0) + event.dx;
@@ -568,6 +595,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
       })
       .on('end', function (event, d) {
+        if (isCleanView) return; // Disable drag in Clean View
         const node = d as ExtendedHierarchyNode;
         if (node.__isDragging) {
           node.__isDragging = false;
@@ -683,6 +711,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('stroke-width', 15)
       .style('cursor', 'pointer')
       .on('click', (e, d) => {
+        if (isCleanView) return;
         e.stopPropagation();
         onLinkClick(d.source.data.id, d.target.data.id);
       });
@@ -710,6 +739,10 @@ export const Diagram: React.FC<DiagramProps> = ({
       })
       .call(drag as any)
       .on('click', function (event, d: ExtendedHierarchyNode) {
+        if (isCleanView) {
+            event.stopPropagation();
+            return;
+        }
         if (d.__isDragging) {
           event.stopPropagation();
           return;
@@ -719,6 +752,15 @@ export const Diagram: React.FC<DiagramProps> = ({
         onNodeClick(d.data, event.shiftKey);
       })
       .on('mouseenter', function (event, d: ExtendedHierarchyNode) {
+        if (isCleanView) {
+            // Only allow interaction with collapse/expand in Clean View
+            const el = d3.select(this as SVGGElement);
+            el.select<SVGGElement>('.action-buttons')
+                .style('opacity', 1)
+                .style('pointer-events', 'all');
+            return;
+        }
+
         const isSelected =
           d.data.id === selectedNodeId || multiSelection.has(d.data.id);
         const isSource = d.data.id === connectionSourceId;
@@ -737,10 +779,20 @@ export const Diagram: React.FC<DiagramProps> = ({
           );
       })
       .on('mouseleave', function (event, d: ExtendedHierarchyNode) {
+        const el = d3.select(this as SVGGElement);
+        // Always hide action buttons on leave, unless selected (in normal mode)
         const isSelected =
           d.data.id === selectedNodeId || multiSelection.has(d.data.id);
+        
+        if (isCleanView) {
+             el.select<SVGGElement>('.action-buttons')
+                .style('opacity', 0)
+                .style('pointer-events', 'none');
+             return;
+        }
+        
         const isSource = d.data.id === connectionSourceId;
-        const el = d3.select(this as SVGGElement);
+
         if (!isSelected)
           el
             .select<SVGGElement>('.action-buttons')
@@ -763,8 +815,25 @@ export const Diagram: React.FC<DiagramProps> = ({
               : secondaryTextColor
           );
       })
-      .style('cursor', () => 'move')
+      .style('cursor', () => isCleanView ? 'default' : 'move')
+      .style('filter', (d) => {
+          // Clean View Filter Highlight Logic
+          if (isCleanView && activeFilter !== 'none') {
+              if (activeFilter === 'meter' && d.data.hasMeter) return 'url(#filter-glow)';
+              if (activeFilter === 'generator' && d.data.hasGeneratorConnection) return 'url(#filter-glow)';
+              if (activeFilter === d.data.type) return 'url(#filter-glow)';
+          }
+          return null;
+      })
       .style('opacity', (d) => {
+        // Clean View Filter Dimming Logic
+        if (isCleanView && activeFilter !== 'none') {
+            const isMatch = (activeFilter === 'meter' && d.data.hasMeter) || 
+                            (activeFilter === 'generator' && d.data.hasGeneratorConnection) ||
+                            (activeFilter === d.data.type);
+            return isMatch ? 1 : 0.2;
+        }
+
         if (!searchMatches) return 1;
         if (searchMatches.has(d.data.id)) return 1;
         if (
@@ -1075,7 +1144,12 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('fill', dotColor)
       .attr('stroke', secondaryTextColor)
       .attr('stroke-width', 1)
-      .style('pointer-events', 'none');
+      .style('cursor', 'pointer')
+      .style('pointer-events', 'all') // Allow clicking to expand in Clean View
+      .on('click', function(e, d) {
+          e.stopPropagation();
+          onToggleCollapse(d.data);
+      });
 
     nodes
       .filter(
@@ -1104,6 +1178,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('fill', secondaryTextColor)
       .style('font-size', '12px')
       .style('font-weight', 'bold')
+      .style('pointer-events', 'none')
       .text('+');
 
     const getBadgeBaseY = (d: ExtendedHierarchyNode) => {
@@ -1213,7 +1288,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
       });
 
-    // Action buttons
+    // Action buttons (Conditional based on Clean View)
     nodes
       .append('g')
       .attr('class', 'action-buttons')
@@ -1230,29 +1305,34 @@ export const Diagram: React.FC<DiagramProps> = ({
       )
       .style('transition', 'opacity 0.2s')
       .call((gSel) => {
-        gSel
-          .append('g')
-          .attr('transform', 'translate(0, -28)')
-          .style('cursor', 'pointer')
-          .on('click', (e, d) => {
-            e.stopPropagation();
-            onDuplicateChild(d.data);
-          })
-          .call((btn) => {
-            btn
-              .append('circle')
-              .attr('r', 10)
-              .attr('fill', '#2563eb')
-              .attr('stroke', '#1e40af')
-              .attr('stroke-width', 1);
-            btn
-              .append('path')
-              .attr('d', ICON_PATHS['add'])
-              .attr('transform', 'translate(-8, -8) scale(0.66)')
-              .attr('fill', 'white');
-            btn.append('title').text(t.inputPanel.addConnection);
-          });
+        
+        // Add Button (Hide in Clean View)
+        if (!isCleanView) {
+            gSel
+              .append('g')
+              .attr('transform', 'translate(0, -28)')
+              .style('cursor', 'pointer')
+              .on('click', (e, d) => {
+                e.stopPropagation();
+                onDuplicateChild(d.data);
+              })
+              .call((btn) => {
+                btn
+                  .append('circle')
+                  .attr('r', 10)
+                  .attr('fill', '#2563eb')
+                  .attr('stroke', '#1e40af')
+                  .attr('stroke-width', 1);
+                btn
+                  .append('path')
+                  .attr('d', ICON_PATHS['add'])
+                  .attr('transform', 'translate(-8, -8) scale(0.66)')
+                  .attr('fill', 'white');
+                btn.append('title').text(t.inputPanel.addConnection);
+              });
+        }
 
+        // Collapse/Expand Button (Show in Clean View)
         gSel
           .filter(
             (d: any) =>
@@ -1289,52 +1369,56 @@ export const Diagram: React.FC<DiagramProps> = ({
             );
           });
 
-        gSel
-          .filter((d: any) => d.depth > 1)
-          .append('g')
-          .attr('transform', 'translate(0, 28)')
-          .style('cursor', 'pointer')
-          .on('click', (e, d) => {
-            e.stopPropagation();
-            onGroupNode(d.data);
-          })
-          .call((btn) => {
-            btn
-              .append('circle')
-              .attr('r', 10)
-              .attr('fill', '#eab308')
-              .attr('stroke', '#ca8a04')
-              .attr('stroke-width', 1);
-            btn
-              .append('path')
-              .attr('d', ICON_PATHS['folder_open'])
-              .attr('transform', 'translate(-8, -8) scale(0.66)')
-              .attr('fill', 'white');
-            btn.append('title').text(t.inputPanel.groupNode);
-          });
+        // Group Button (Hide in Clean View)
+        if (!isCleanView) {
+            gSel
+              .filter((d: any) => d.depth > 1)
+              .append('g')
+              .attr('transform', 'translate(0, 28)')
+              .style('cursor', 'pointer')
+              .on('click', (e, d) => {
+                e.stopPropagation();
+                onGroupNode(d.data);
+              })
+              .call((btn) => {
+                btn
+                  .append('circle')
+                  .attr('r', 10)
+                  .attr('fill', '#eab308')
+                  .attr('stroke', '#ca8a04')
+                  .attr('stroke-width', 1);
+                btn
+                  .append('path')
+                  .attr('d', ICON_PATHS['folder_open'])
+                  .attr('transform', 'translate(-8, -8) scale(0.66)')
+                  .attr('fill', 'white');
+                btn.append('title').text(t.inputPanel.groupNode);
+              });
 
-        gSel
-          .append('g')
-          .attr('transform', 'translate(0, 56)')
-          .style('cursor', 'pointer')
-          .on('click', (e, d) => {
-            e.stopPropagation();
-            onDeleteNode(d.data);
-          })
-          .call((btn) => {
-            btn
-              .append('circle')
-              .attr('r', 10)
-              .attr('fill', '#ef4444')
-              .attr('stroke', '#b91c1c')
-              .attr('stroke-width', 1);
-            btn
-              .append('path')
-              .attr('d', ICON_PATHS['delete'])
-              .attr('transform', 'translate(-8, -8) scale(0.66)')
-              .attr('fill', 'white');
-            btn.append('title').text(t.inputPanel.deleteComponent);
-          });
+            // Delete Button (Hide in Clean View)
+            gSel
+              .append('g')
+              .attr('transform', 'translate(0, 56)')
+              .style('cursor', 'pointer')
+              .on('click', (e, d) => {
+                e.stopPropagation();
+                onDeleteNode(d.data);
+              })
+              .call((btn) => {
+                btn
+                  .append('circle')
+                  .attr('r', 10)
+                  .attr('fill', '#ef4444')
+                  .attr('stroke', '#b91c1c')
+                  .attr('stroke-width', 1);
+                btn
+                  .append('path')
+                  .attr('d', ICON_PATHS['delete'])
+                  .attr('transform', 'translate(-8, -8) scale(0.66)')
+                  .attr('fill', 'white');
+                btn.append('title').text(t.inputPanel.deleteComponent);
+              });
+        }
       });
 
     // 2. Labels group
@@ -1489,8 +1573,9 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('fill-opacity', 0.8)
         .attr('stroke', textColor)
         .attr('stroke-width', 2)
-        .style('pointer-events', 'all')
+        .style('pointer-events', isCleanView ? 'none' : 'all') // Disable interactions in clean view
         .on('click', function (e) {
+          if (isCleanView) return;
           if ((e as any).defaultPrevented) return;
           e.stopPropagation();
           if (onEditPrintSettings) onEditPrintSettings();
@@ -1576,8 +1661,9 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('fill', 'white')
           .attr('fill-opacity', 0.01)
           .style('cursor', 'pointer')
-          .style('pointer-events', 'all')
+          .style('pointer-events', isCleanView ? 'none' : 'all') // Disable interactions in clean view
           .on('click', (e) => {
+            if (isCleanView) return;
             if ((e as any).defaultPrevented) return;
             e.stopPropagation();
             if (onEditPrintSettings) onEditPrintSettings(fieldKey);
@@ -1643,19 +1729,21 @@ export const Diagram: React.FC<DiagramProps> = ({
         'approvedBy'
       );
 
-      titleBlock
-        .on('mouseenter', function () {
-          d3.select(this as SVGGElement)
-            .select('rect')
-            .attr('stroke', '#3b82f6')
-            .attr('stroke-width', 3);
-        })
-        .on('mouseleave', function () {
-          d3.select(this as SVGGElement)
-            .select('rect')
-            .attr('stroke', textColor)
-            .attr('stroke-width', 2);
-        });
+      if (!isCleanView) {
+        titleBlock
+            .on('mouseenter', function () {
+            d3.select(this as SVGGElement)
+                .select('rect')
+                .attr('stroke', '#3b82f6')
+                .attr('stroke-width', 3);
+            })
+            .on('mouseleave', function () {
+            d3.select(this as SVGGElement)
+                .select('rect')
+                .attr('stroke', textColor)
+                .attr('stroke-width', 2);
+            });
+      }
     }
 
     // Legend
@@ -1773,6 +1861,8 @@ export const Diagram: React.FC<DiagramProps> = ({
     onGroupNode,
     onNodeMove,
     onDisconnectLink,
+    isCleanView,
+    activeFilter
   ]);
 
   return (

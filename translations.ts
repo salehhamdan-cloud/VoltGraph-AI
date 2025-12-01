@@ -193,6 +193,13 @@ export const translations = {
         rev: "REV",
         approved: "APPROVED",
         org: "ORGANIZATION"
+    },
+    filters: {
+        title: "Filter / Highlight",
+        none: "No Filter",
+        meter: "Highlight Meters",
+        generator: "Highlight Generators",
+        byType: "By Component Type"
     }
   },
   he: {
@@ -385,6 +392,13 @@ export const translations = {
         rev: "מהדורה",
         approved: "אושר",
         org: "ארגון"
+    },
+    filters: {
+        title: "סינון / הדגשה",
+        none: "ללא סינון",
+        meter: "הדגש מונים",
+        generator: "הדגש גנרטורים",
+        byType: "לפי סוג רכיב"
     }
   },
   ar: {
@@ -577,6 +591,13 @@ export const translations = {
         rev: "الإصدار",
         approved: "الموافقة",
         org: "المؤسسة"
+    },
+    filters: {
+        title: "تصفية / تمييز",
+        none: "بدون تصفية",
+        meter: "تمييز العدادات",
+        generator: "تمييز المولدات",
+        byType: "حسب نوع المكون"
     }
   }
 };

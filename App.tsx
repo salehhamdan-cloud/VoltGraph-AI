@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
@@ -139,6 +141,7 @@ export default function App() {
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [printSettingsFocus, setPrintSettingsFocus] = useState<string | undefined>(undefined);
   const [isCleanView, setIsCleanView] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<string>('none');
   
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<Theme>('light');
@@ -479,6 +482,11 @@ export default function App() {
   }, [activePageId, activeProjectId]);
 
   useEffect(() => {
+      // Reset filter when exiting clean view
+      if (!isCleanView) setActiveFilter('none');
+  }, [isCleanView]);
+
+  useEffect(() => {
     setSaveStatus('saving');
     const timer = setTimeout(() => {
       try {
@@ -555,6 +563,8 @@ export default function App() {
   };
 
   const handleNodeClick = (node: ElectricalNode, isShiftKey: boolean) => {
+    if (isCleanView) return; // Disable selection in Clean View
+
     if (isConnectMode) {
         if (!connectionSource) {
             setConnectionSource(node); 
@@ -1237,13 +1247,13 @@ export default function App() {
         </div>
         
         <div className="flex-1 max-w-md mx-6 relative">
-            <span className={`absolute top-1/2 -translate-y-1/2 material-icons-round text-slate-500 ${isRTL ? 'right-3' : 'left-3'}`}>search</span>
+            <span className="absolute top-1/2 -translate-y-1/2 material-icons-round text-slate-500 left-3">search</span>
             <input 
                 type="text" 
                 placeholder={t.searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`w-full bg-slate-800 border border-slate-700 rounded-full py-2 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-500 ${isRTL ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
+                className="w-full bg-slate-800 border border-slate-700 rounded-full py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-500"
             />
         </div>
 
@@ -1271,7 +1281,7 @@ export default function App() {
                      <span className="material-icons-round text-sm">expand_more</span>
                  </button>
                  {showAddIndependentMenu && (
-                    <div className={`absolute top-full mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden animate-fadeIn ${isRTL ? 'left-0' : 'right-0'}`}>
+                    <div className="absolute top-full right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden animate-fadeIn">
                          <button onClick={() => handleAddIndependentNode(ComponentType.SYSTEM_ROOT)} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2">
                              <span className="material-icons-round text-slate-400">domain</span>
                              {t.addGrid}
@@ -1443,6 +1453,26 @@ export default function App() {
             {/* Clean View Controls */}
             {isCleanView && (
                 <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-slate-700 shadow-2xl">
+                    <div className="flex items-center gap-1 border-r border-slate-700 pr-2 mr-2">
+                        <span className="material-icons-round text-slate-500 text-sm">filter_alt</span>
+                        <select
+                            value={activeFilter}
+                            onChange={(e) => setActiveFilter(e.target.value as any)}
+                            className="bg-slate-800 text-slate-300 text-sm border border-slate-700 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[150px]"
+                        >
+                            <option value="none">{t.filters.none}</option>
+                            <optgroup label={t.filters.title}>
+                                <option value="meter">{t.filters.meter}</option>
+                                <option value="generator">{t.filters.generator}</option>
+                            </optgroup>
+                            <optgroup label={t.filters.byType}>
+                                {Object.values(ComponentType).map(type => (
+                                    <option key={type} value={type}>{t.componentTypes[type]}</option>
+                                ))}
+                            </optgroup>
+                        </select>
+                    </div>
+
                     <button
                         onClick={() => setOrientation(prev => prev === 'horizontal' ? 'vertical' : 'horizontal')}
                         className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
@@ -1514,6 +1544,8 @@ export default function App() {
                     t={t}
                     language={language}
                     theme={theme}
+                    isCleanView={isCleanView}
+                    activeFilter={activeFilter as any}
                 />
             </div>
         </div>
