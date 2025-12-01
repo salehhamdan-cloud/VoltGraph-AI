@@ -1,5 +1,3 @@
-
-
 import { ComponentType } from "./types";
 
 export const translations = {
@@ -44,7 +42,8 @@ export const translations = {
         grid: "Main Supply",
         gen: "Standby Power",
         trans: "Step Down/Up",
-        load: "Independent Load"
+        load: "Independent Load",
+        ups: "Uninterruptible Power"
     },
     connectMode: {
       source: "Select first component (A)...",
@@ -63,7 +62,8 @@ export const translations = {
       [ComponentType.BREAKER]: "Breaker",
       [ComponentType.SWITCH]: "Switch",
       [ComponentType.LOAD]: "Load",
-      [ComponentType.GENERATOR]: "Generator"
+      [ComponentType.GENERATOR]: "Generator",
+      [ComponentType.UPS]: "UPS"
     },
     inputPanel: {
       addConnection: "Add Connection",
@@ -200,6 +200,12 @@ export const translations = {
         meter: "Highlight Meters",
         generator: "Highlight Generators",
         byType: "By Component Type"
+    },
+    annotations: {
+        enable: "Enable Drawing",
+        disable: "Disable Drawing",
+        clear: "Clear All",
+        color: "Ink Color"
     }
   },
   he: {
@@ -243,7 +249,8 @@ export const translations = {
         grid: "אספקה ראשית",
         gen: "כוח גיבוי",
         trans: "הורדה/העלאה",
-        load: "עומס עצמאי"
+        load: "עומס עצמאי",
+        ups: "מערכת אל-פסק"
     },
     connectMode: {
       source: "בחר רכיב ראשון (א)...",
@@ -262,7 +269,8 @@ export const translations = {
       [ComponentType.BREAKER]: "מפסק",
       [ComponentType.SWITCH]: "מתג",
       [ComponentType.LOAD]: "עומס/צרכן",
-      [ComponentType.GENERATOR]: "גנרטור"
+      [ComponentType.GENERATOR]: "גנרטור",
+      [ComponentType.UPS]: "אל-פסק (UPS)"
     },
     inputPanel: {
       addConnection: "הוסף חיבור",
@@ -399,6 +407,12 @@ export const translations = {
         meter: "הדגש מונים",
         generator: "הדגש גנרטורים",
         byType: "לפי סוג רכיב"
+    },
+    annotations: {
+        enable: "אפשר ציור",
+        disable: "כבה ציור",
+        clear: "נקה הכל",
+        color: "צבע עט"
     }
   },
   ar: {
@@ -442,7 +456,8 @@ export const translations = {
         grid: "التغذية الرئيسية",
         gen: "طاقة احتياطية",
         trans: "رفع/خفض",
-        load: "حمل مستقل"
+        load: "حمل مستقل",
+        ups: "مزود طاقة غير منقطع"
     },
     connectMode: {
       source: "اختر المكون الأول (أ)...",
@@ -461,7 +476,8 @@ export const translations = {
       [ComponentType.BREAKER]: "قاطع",
       [ComponentType.SWITCH]: "مفتاح",
       [ComponentType.LOAD]: "حمل",
-      [ComponentType.GENERATOR]: "مولد"
+      [ComponentType.GENERATOR]: "مولد",
+      [ComponentType.UPS]: "مزود طاقة (UPS)"
     },
     inputPanel: {
       addConnection: "إضافة اتصال",
@@ -598,6 +614,12 @@ export const translations = {
         meter: "تمييز العدادات",
         generator: "تمييز المولدات",
         byType: "حسب نوع المكون"
+    },
+    annotations: {
+        enable: "تمكين الرسم",
+        disable: "تعطيل الرسم",
+        clear: "مسح الكل",
+        color: "لون الحبر"
     }
   }
 };

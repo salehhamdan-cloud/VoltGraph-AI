@@ -1,5 +1,3 @@
-
-
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
@@ -143,6 +141,11 @@ export default function App() {
   const [isCleanView, setIsCleanView] = useState(false);
   const [activeFilter, setActiveFilter] = useState<string>('none');
   
+  // Annotation State
+  const [annotations, setAnnotations] = useState<{id: string, path: string, color: string}[]>([]);
+  const [isAnnotating, setIsAnnotating] = useState(false);
+  const [annotationColor, setAnnotationColor] = useState('#ef4444');
+  
   const [language, setLanguage] = useState<Language>('en');
   const [theme, setTheme] = useState<Theme>('light');
   const [showAddIndependentMenu, setShowAddIndependentMenu] = useState(false);
@@ -182,6 +185,12 @@ export default function App() {
       }
     });
   };
+
+  const handleAnnotationAdd = (path: string, color: string) => {
+    setAnnotations(prev => [...prev, { id: generateId('ant'), path, color }]);
+  };
+
+  const handleClearAnnotations = () => setAnnotations([]);
 
   const saveToHistory = useCallback(() => {
     setHistory(prev => [...prev, JSON.parse(JSON.stringify(projects))]);
@@ -483,7 +492,10 @@ export default function App() {
 
   useEffect(() => {
       // Reset filter when exiting clean view
-      if (!isCleanView) setActiveFilter('none');
+      if (!isCleanView) {
+          setActiveFilter('none');
+          setIsAnnotating(false);
+      }
   }, [isCleanView]);
 
   useEffect(() => {
@@ -642,6 +654,7 @@ export default function App() {
           case ComponentType.GENERATOR: desc = t.defaultDesc.gen; break;
           case ComponentType.TRANSFORMER: desc = t.defaultDesc.trans; break;
           case ComponentType.LOAD: desc = t.defaultDesc.load; break;
+          case ComponentType.UPS: desc = t.defaultDesc.ups; break;
       }
       const newNode: ElectricalNode = {
         id: generateId(String(type).toLowerCase()),
@@ -1294,6 +1307,10 @@ export default function App() {
                              <span className="material-icons-round text-yellow-400">electric_bolt</span>
                              {t.addTrans}
                          </button>
+                         <button onClick={() => handleAddIndependentNode(ComponentType.UPS)} className="w-full text-left px-4 py-3 text-sm text-slate-300 hover:bg-slate-700 hover:text-white flex items-center gap-2">
+                             <span className="material-icons-round text-cyan-500">battery_charging_full</span>
+                             UPS
+                         </button>
                     </div>
                  )}
              </div>
@@ -1474,14 +1491,42 @@ export default function App() {
                     </div>
 
                     <button
+                        onClick={() => setIsAnnotating(!isAnnotating)}
+                        className={`p-2 rounded-lg transition-colors border ${isAnnotating ? 'bg-purple-600 text-white border-purple-500' : 'text-slate-400 hover:text-white hover:bg-slate-700/50 border-transparent'}`}
+                        title={isAnnotating ? t.annotations.disable : t.annotations.enable}
+                    >
+                        <span className="material-icons-round">edit</span>
+                    </button>
+
+                    {isAnnotating && (
+                        <>
+                            <input 
+                                type="color" 
+                                value={annotationColor} 
+                                onChange={(e) => setAnnotationColor(e.target.value)} 
+                                className="w-8 h-8 rounded cursor-pointer bg-transparent border-none p-0"
+                                title={t.annotations.color}
+                            />
+                            <button
+                                onClick={handleClearAnnotations}
+                                className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors"
+                                title={t.annotations.clear}
+                            >
+                                <span className="material-icons-round">delete_sweep</span>
+                            </button>
+                            <div className="w-px h-6 bg-slate-700 mx-1"></div>
+                        </>
+                    )}
+
+                    <div className="w-px h-6 bg-slate-700"></div>
+
+                    <button
                         onClick={() => setOrientation(prev => prev === 'horizontal' ? 'vertical' : 'horizontal')}
                         className="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg transition-colors"
                         title={t.toggleOrientation}
                     >
                         <span className="material-icons-round transform transition-transform duration-300" style={{ rotate: orientation === 'vertical' ? '90deg' : '0deg' }}>schema</span>
                     </button>
-
-                    <div className="w-px h-6 bg-slate-700"></div>
 
                     <button
                         onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')}
@@ -1546,6 +1591,10 @@ export default function App() {
                     theme={theme}
                     isCleanView={isCleanView}
                     activeFilter={activeFilter as any}
+                    annotations={annotations}
+                    isAnnotating={isAnnotating}
+                    annotationColor={annotationColor}
+                    onAnnotationAdd={handleAnnotationAdd}
                 />
             </div>
         </div>

@@ -1,5 +1,3 @@
-
-
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
@@ -33,6 +31,10 @@ interface DiagramProps {
   theme: 'light' | 'dark';
   isCleanView?: boolean;
   activeFilter?: 'none' | 'meter' | 'generator' | string;
+  annotations?: {id: string, path: string, color: string}[];
+  isAnnotating?: boolean;
+  annotationColor?: string;
+  onAnnotationAdd?: (path: string, color: string) => void;
 }
 
 type ExtendedHierarchyNode = Omit<
@@ -86,7 +88,11 @@ export const Diagram: React.FC<DiagramProps> = ({
   language,
   theme,
   isCleanView = false,
-  activeFilter = 'none'
+  activeFilter = 'none',
+  annotations = [],
+  isAnnotating = false,
+  annotationColor = '#ef4444',
+  onAnnotationAdd
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -155,7 +161,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     // Background click handler
     svg.on('click', (event) => {
       if (event.defaultPrevented) return; // Zoom drag
-      if (isCleanView) return; // Disable selection in clean view
+      if (isCleanView && !isAnnotating) return; // Disable selection in clean view
       onBackgroundClick?.();
     });
 
@@ -340,6 +346,10 @@ export const Diagram: React.FC<DiagramProps> = ({
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
+      .filter((event) => {
+          if (isAnnotating) return false;
+          return !event.button && !event.ctrlKey;
+      })
       .on('zoom', (event) => {
         transformRef.current = event.transform;
         g.attr('transform', event.transform);
@@ -754,9 +764,10 @@ export const Diagram: React.FC<DiagramProps> = ({
       .on('mouseenter', function (event, d: ExtendedHierarchyNode) {
         if (isCleanView) {
             // Only allow interaction with collapse/expand in Clean View
+            // But if it's permanent, we don't need to change opacity here
+            // Just ensure pointer-events are all
             const el = d3.select(this as SVGGElement);
             el.select<SVGGElement>('.action-buttons')
-                .style('opacity', 1)
                 .style('pointer-events', 'all');
             return;
         }
@@ -785,9 +796,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           d.data.id === selectedNodeId || multiSelection.has(d.data.id);
         
         if (isCleanView) {
-             el.select<SVGGElement>('.action-buttons')
-                .style('opacity', 0)
-                .style('pointer-events', 'none');
+             // In Clean View, keep action buttons visible (permanent)
              return;
         }
         
@@ -1299,10 +1308,16 @@ export const Diagram: React.FC<DiagramProps> = ({
         const box = getRectBox(d);
         return `translate(${box.x + box.w + 12}, ${box.y + box.h / 2})`;
       })
-      .style('opacity', (d) => (d.data.id === selectedNodeId ? 1 : 0))
-      .style('pointer-events', (d) =>
-        d.data.id === selectedNodeId ? 'all' : 'none'
-      )
+      .style('opacity', (d) => {
+        // In Clean View, keep action buttons (collapse icon) always visible
+        if (isCleanView) return 1;
+        return d.data.id === selectedNodeId ? 1 : 0;
+      })
+      .style('pointer-events', (d) => {
+        // In Clean View, keep action buttons clickable
+        if (isCleanView) return 'all';
+        return d.data.id === selectedNodeId ? 'all' : 'none';
+      })
       .style('transition', 'opacity 0.2s')
       .call((gSel) => {
         
@@ -1519,6 +1534,71 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
       }
     });
+
+    // 3. Annotations Layer (Always on top)
+    const annotationGroup = g.append('g').attr('class', 'annotations-layer');
+    
+    // Render existing annotations
+    if (annotations) {
+        annotations.forEach(a => {
+            annotationGroup.append('path')
+                .attr('d', a.path)
+                .attr('stroke', a.color)
+                .attr('stroke-width', 3)
+                .attr('fill', 'none')
+                .attr('stroke-linecap', 'round')
+                .attr('stroke-linejoin', 'round')
+                .attr('opacity', 0.8);
+        });
+    }
+
+    // Annotation Interaction
+    if (isAnnotating && isCleanView) {
+        // Overlay for capturing draw events
+        const overlay = g.append('rect')
+           .attr('width', '40000') // Huge rect to cover everything
+           .attr('height', '40000')
+           .attr('x', -20000)
+           .attr('y', -20000)
+           .attr('fill', 'transparent')
+           .style('cursor', 'crosshair');
+
+        let currentPathString = "";
+        let currentPathElement: SVGPathElement | null = null;
+
+        const drawDrag = d3.drag<SVGRectElement, unknown>()
+            .container(function() { return this; })
+            .on('start', (event) => {
+                 currentPathString = `M ${event.x} ${event.y}`;
+                 // Render temporary path
+                 currentPathElement = annotationGroup.append('path')
+                    .attr('d', currentPathString)
+                    .attr('stroke', annotationColor || 'red')
+                    .attr('stroke-width', 3)
+                    .attr('fill', 'none')
+                    .attr('stroke-linecap', 'round')
+                    .attr('stroke-linejoin', 'round')
+                    .node();
+            })
+            .on('drag', (event) => {
+                 if (currentPathElement) {
+                     currentPathString += ` L ${event.x} ${event.y}`;
+                     d3.select(currentPathElement).attr('d', currentPathString);
+                 }
+            })
+            .on('end', () => {
+                 if (currentPathString && onAnnotationAdd) {
+                     // Pass back to React state, which triggers re-render
+                     // This will clear the temp path but the new state will render it via the 'annotations' loop above
+                     onAnnotationAdd(currentPathString, annotationColor || 'red');
+                 }
+                 currentPathElement = null;
+                 currentPathString = "";
+            });
+
+        overlay.call(drawDrag);
+    }
+
 
     // Dynamic content bounds
     let maxY = 600;
@@ -1862,7 +1942,10 @@ export const Diagram: React.FC<DiagramProps> = ({
     onNodeMove,
     onDisconnectLink,
     isCleanView,
-    activeFilter
+    activeFilter,
+    annotations,
+    isAnnotating,
+    annotationColor
   ]);
 
   return (

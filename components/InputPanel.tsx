@@ -1,5 +1,7 @@
 
 
+
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ComponentType, NewNodeData, ElectricalNode, ConnectionStyle, NodeShape } from '../types';
 import { COMMON_MODELS, COMPONENT_CONFIG, DEFAULT_CONNECTION_STYLE } from '../constants';
@@ -280,6 +282,10 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                       <span className="material-icons-round text-purple-400 text-sm">lightbulb</span>
                       <span className="text-xs text-slate-200">{t.componentTypes[ComponentType.LOAD]}</span>
                   </button>
+                  <button onClick={() => onAddIndependent(ComponentType.UPS)} className="p-2 bg-slate-700 hover:bg-slate-600 rounded text-left flex items-center gap-2 transition-colors">
+                      <span className="material-icons-round text-cyan-500 text-sm">battery_charging_full</span>
+                      <span className="text-xs text-slate-200">{t.componentTypes[ComponentType.UPS]}</span>
+                  </button>
               </div>
           </div>
 
@@ -412,7 +418,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
   // --- Normal Node Edit Mode ---
 
   const showMeterOptions = formData.type === ComponentType.BREAKER || formData.type === ComponentType.SWITCH || formData.type === ComponentType.DISTRIBUTION_BOARD;
-  const showKvaOption = formData.type === ComponentType.TRANSFORMER || formData.type === ComponentType.GENERATOR;
+  const showKvaOption = formData.type === ComponentType.TRANSFORMER || formData.type === ComponentType.GENERATOR || formData.type === ComponentType.UPS;
   const isSystemRoot = selectedNode.type === ComponentType.SYSTEM_ROOT;
 
   return (

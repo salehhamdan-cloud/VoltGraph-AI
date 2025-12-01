@@ -1,4 +1,5 @@
 
+
 export enum ComponentType {
   SYSTEM_ROOT = 'SYSTEM_ROOT',
   TRANSFORMER = 'TRANSFORMER',
@@ -7,7 +8,8 @@ export enum ComponentType {
   BREAKER = 'BREAKER',
   SWITCH = 'SWITCH',
   LOAD = 'LOAD',
-  GENERATOR = 'GENERATOR'
+  GENERATOR = 'GENERATOR',
+  UPS = 'UPS'
 }
 
 export interface ConnectionStyle {

@@ -1,5 +1,6 @@
 
 
+
 import { ComponentType, Project, ConnectionStyle, PrintMetadata } from "./types";
 
 export const DEFAULT_CONNECTION_STYLE: ConnectionStyle = {
@@ -40,6 +41,7 @@ export const COMPONENT_CONFIG = {
   [ComponentType.SWITCH]: { color: '#22c55e', icon: 'toggle_on' }, // Green
   [ComponentType.LOAD]: { color: '#a855f7', icon: 'lightbulb' }, // Purple
   [ComponentType.GENERATOR]: { color: '#ef4444', icon: 'letter_g' }, // Red - Changed to letter G
+  [ComponentType.UPS]: { color: '#0891b2', icon: 'battery_charging_full' }, // Cyan/Teal
 };
 
 export const ICON_PATHS: Record<string, string> = {
@@ -61,7 +63,8 @@ export const ICON_PATHS: Record<string, string> = {
   link_off: "M17 7h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1 0 1.55-1.15 2.84-2.63 3.05l1.52 1.52C20.8 15.77 22 14.02 22 12c0-2.76-2.24-5-5-5zM3.27 3L2 4.27l3.11 3.11C3.29 8.12 2 9.91 2 12c0 2.76 2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1 0-.25.03-.5.08-.73L6.29 13.5l.6.6.3.3 3.74 3.74.6.6 8.2 8.2L21 25.73 3.27 3z",
   close: "M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
   letter_g: "M20.64 12.2c0-.63-.06-1.25-.16-1.84H12v3.49h4.84a4.14 4.14 0 0 1-1.8 2.71v2.25h2.92c1.71-1.58 2.69-3.9 2.69-6.61zM12 21c2.43 0 4.47-.8 5.96-2.18l-2.91-2.25c-.81.54-1.84.86-3.05.86-2.34 0-4.32-1.58-5.03-3.71H3.85v2.33C5.33 18.97 8.47 21 12 21zM6.97 13.71c-.18-.53-.28-1.09-.28-1.67s.1-1.14.28-1.67V8.05H3.85a8.55 8.55 0 0 0 0 7.99l3.12-2.33zM12 6.88c1.32 0 2.51.45 3.45 1.35l2.58-2.59A9 9 0 0 0 12 3c-3.53 0-6.67 2.03-8.15 5.05l3.12 2.33c.71-2.13 2.69-3.71 5.03-3.71z",
-  edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"
+  edit: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
+  battery_charging_full: "M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z M11 20v-5.5H9L13 7v5.5h2L11 20z"
 };
 
 export const COMMON_MODELS = [
@@ -74,5 +77,8 @@ export const COMMON_MODELS = [
   "Generic Heavy Duty",
   "Smart Meter Three Phase",
   "Caterpillar C15 Generator",
-  "Kohler Power System"
+  "Kohler Power System",
+  "APC Smart-UPS",
+  "Eaton 9PX UPS",
+  "Vertiv Liebert"
 ];
