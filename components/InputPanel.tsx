@@ -53,12 +53,16 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     kva: undefined,
     description: '',
     customColor: undefined,
+    customBgColor: undefined,
     shape: 'rectangle',
     customImage: undefined,
     hasMeter: false,
     meterNumber: '',
+    isExcludedFromMeter: false,
     hasGeneratorConnection: false,
-    generatorName: ''
+    generatorName: '',
+    isAirConditioning: false,
+    isReserved: false
   });
 
   const [connectionData, setConnectionData] = useState<ConnectionStyle>(DEFAULT_CONNECTION_STYLE);
@@ -76,12 +80,16 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             kva: selectedNode.kva,
             description: selectedNode.description || '',
             customColor: selectedNode.customColor,
+            customBgColor: selectedNode.customBgColor,
             shape: selectedNode.shape || 'rectangle',
             customImage: selectedNode.customImage,
             hasMeter: selectedNode.hasMeter || false,
             meterNumber: selectedNode.meterNumber || '',
+            isExcludedFromMeter: selectedNode.isExcludedFromMeter || false,
             hasGeneratorConnection: selectedNode.hasGeneratorConnection || false,
-            generatorName: selectedNode.generatorName || ''
+            generatorName: selectedNode.generatorName || '',
+            isAirConditioning: selectedNode.isAirConditioning || false,
+            isReserved: selectedNode.isReserved || false
         });
     } else if (activeTab === 'add') {
         setFormData({
@@ -94,12 +102,16 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             kva: undefined,
             description: '',
             customColor: undefined,
+            customBgColor: undefined,
             shape: 'rectangle',
             customImage: undefined,
             hasMeter: false,
             meterNumber: '',
+            isExcludedFromMeter: false,
             hasGeneratorConnection: false,
-            generatorName: ''
+            generatorName: '',
+            isAirConditioning: false,
+            isReserved: false
         });
     }
   }, [activeTab, selectedNode]);
@@ -174,12 +186,16 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             kva: undefined,
             description: '',
             customColor: undefined,
+            customBgColor: undefined,
             shape: 'rectangle',
             customImage: undefined,
             hasMeter: false,
             meterNumber: '',
+            isExcludedFromMeter: false,
             hasGeneratorConnection: false,
-            generatorName: ''
+            generatorName: '',
+            isAirConditioning: false,
+            isReserved: false
         }));
     } else {
         onEdit(formData);
@@ -200,17 +216,32 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                  </span>
             </div>
             <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
-                    <div className="flex items-center gap-2">
-                        <input 
-                            type="color" 
-                            name="customColor"
-                            value={formData.customColor || '#475569'}
-                            onChange={handleChange}
-                            className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
-                        />
-                        <span className="text-xs text-slate-500">Apply to all</span>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="color" 
+                                name="customColor"
+                                value={formData.customColor || '#475569'}
+                                onChange={handleChange}
+                                className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-500">All Nodes</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customBgColor}</label>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="color" 
+                                name="customBgColor"
+                                value={formData.customBgColor || '#ffffff'}
+                                onChange={handleChange}
+                                className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-500">Background</span>
+                        </div>
                     </div>
                 </div>
                 <div>
@@ -364,6 +395,8 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                           <option value="solid">{t.inputPanel.patterns.solid}</option>
                           <option value="dashed">{t.inputPanel.patterns.dashed}</option>
                           <option value="dotted">{t.inputPanel.patterns.dotted}</option>
+                          <option value="dash-dot">{t.inputPanel.patterns.dashDot}</option>
+                          <option value="long-dash">{t.inputPanel.patterns.longDash}</option>
                       </select>
                   </div>
 
@@ -476,19 +509,32 @@ export const InputPanel: React.FC<InputPanelProps> = ({
 
         {activeTab === 'edit' && (
             <div className="space-y-4 border-b border-slate-700 pb-4 mb-4">
-                <div>
-                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
-                    <div className="flex items-center gap-2">
-                        <input 
-                            type="color" 
-                            name="customColor"
-                            value={formData.customColor || COMPONENT_CONFIG[formData.type]?.color || '#475569'}
-                            onChange={handleChange}
-                            className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
-                        />
-                         <span className="text-xs text-slate-500">
-                            {formData.customColor || 'Default'}
-                        </span>
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customColor}</label>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="color" 
+                                name="customColor"
+                                value={formData.customColor || COMPONENT_CONFIG[formData.type]?.color || '#475569'}
+                                onChange={handleChange}
+                                className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-500">Icon</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.customBgColor}</label>
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="color" 
+                                name="customBgColor"
+                                value={formData.customBgColor || '#ffffff'}
+                                onChange={handleChange}
+                                className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
+                            />
+                            <span className="text-xs text-slate-500">Fill</span>
+                        </div>
                     </div>
                 </div>
 
@@ -608,6 +654,22 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </>
             )}
 
+            {/* Not Connected to Meter Checkbox */}
+            <div className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    id="isExcludedFromMeter"
+                    name="isExcludedFromMeter"
+                    checked={formData.isExcludedFromMeter}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-gray-500 rounded focus:ring-gray-400 bg-slate-700 border-slate-600"
+                />
+                <label htmlFor="isExcludedFromMeter" className="text-xs font-medium text-slate-300 select-none">
+                    {t.inputPanel.excludedFromMeter}
+                </label>
+            </div>
+
+            {/* Generator Connection */}
             <div className="flex items-center gap-2">
                 <input
                     type="checkbox"
@@ -634,6 +696,36 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                     />
                 </div>
             )}
+
+            {/* A/C Checkbox */}
+            <div className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    id="isAirConditioning"
+                    name="isAirConditioning"
+                    checked={formData.isAirConditioning}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-cyan-500 rounded focus:ring-cyan-400 bg-slate-700 border-slate-600"
+                />
+                <label htmlFor="isAirConditioning" className="text-xs font-medium text-slate-300 select-none">
+                    {t.inputPanel.isAC}
+                </label>
+            </div>
+
+            {/* Reserved Checkbox */}
+            <div className="flex items-center gap-2">
+                <input
+                    type="checkbox"
+                    id="isReserved"
+                    name="isReserved"
+                    checked={formData.isReserved}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-yellow-500 rounded focus:ring-yellow-400 bg-slate-700 border-slate-600"
+                />
+                <label htmlFor="isReserved" className="text-xs font-medium text-slate-300 select-none">
+                    {t.inputPanel.isReserved}
+                </label>
+            </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">

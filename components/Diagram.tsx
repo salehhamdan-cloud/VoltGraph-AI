@@ -30,7 +30,7 @@ interface DiagramProps {
   language: string;
   theme: 'light' | 'dark';
   isCleanView?: boolean;
-  activeFilter?: 'none' | 'meter' | 'generator' | string;
+  activeFilters?: Set<string>;
   annotations?: {id: string, path: string, color: string}[];
   isAnnotating?: boolean;
   annotationColor?: string;
@@ -88,7 +88,7 @@ export const Diagram: React.FC<DiagramProps> = ({
   language,
   theme,
   isCleanView = false,
-  activeFilter = 'none',
+  activeFilters = new Set(),
   annotations = [],
   isAnnotating = false,
   annotationColor = '#ef4444',
@@ -424,9 +424,12 @@ export const Diagram: React.FC<DiagramProps> = ({
         const totalW = 20 + (d.data.generatorName ? width + 6 : 0);
         badgeWidth += totalW;
       }
-      if (d.data.hasMeter && d.data.hasGeneratorConnection) {
-        badgeWidth += 5; // Minimal spacing between badges
-      }
+      // Add extra width for new badges (fixed approximate width as they are icon based)
+      if (d.data.isExcludedFromMeter) badgeWidth += 24;
+      if (d.data.isAirConditioning) badgeWidth += 24;
+      if (d.data.isReserved) badgeWidth += 24;
+
+      if (d.data.hasMeter && d.data.hasGeneratorConnection) badgeWidth += 5;
 
       const contentWidth = Math.max(
         nameLen,
@@ -445,7 +448,8 @@ export const Diagram: React.FC<DiagramProps> = ({
       if (specText) contentHeight += 14;
       if (model) contentHeight += 14;
       if (desc) contentHeight += 14;
-      if (d.data.hasMeter || d.data.hasGeneratorConnection) contentHeight += 26;
+      // Adjust height if any badge is present
+      if (d.data.hasMeter || d.data.hasGeneratorConnection || d.data.isExcludedFromMeter || d.data.isAirConditioning || d.data.isReserved) contentHeight += 26;
       contentHeight += 12;
 
       return { w: nodeW, h: contentHeight };
@@ -663,6 +667,10 @@ export const Diagram: React.FC<DiagramProps> = ({
                   ? '8,4'
                   : style.lineStyle === 'dotted'
                   ? '2,4'
+                  : style.lineStyle === 'dash-dot'
+                  ? '8,4,2,4'
+                  : style.lineStyle === 'long-dash'
+                  ? '16,4'
                   : 'none'
               )
               .attr(
@@ -780,10 +788,13 @@ export const Diagram: React.FC<DiagramProps> = ({
         el.select<SVGGElement>('.action-buttons')
           .style('opacity', 1)
           .style('pointer-events', 'all');
+        
+        // Hover highlight color logic
+        const hoverFill = isDark ? '#334155' : '#e2e8f0';
         el.select<SVGRectElement | SVGCircleElement>('.node-bg')
           .transition()
           .duration(200)
-          .attr('fill', isDark ? '#334155' : '#e2e8f0')
+          .attr('fill', hoverFill)
           .attr(
             'stroke',
             isSource ? '#f59e0b' : isSelected ? '#3b82f6' : '#64748b'
@@ -807,13 +818,13 @@ export const Diagram: React.FC<DiagramProps> = ({
             .select<SVGGElement>('.action-buttons')
             .style('opacity', 0)
             .style('pointer-events', 'none');
+            
+        // Revert fill color to custom or default
         el.select<SVGRectElement | SVGCircleElement>('.node-bg')
           .transition()
           .duration(200)
           .attr('fill', (d2: ExtendedHierarchyNode) =>
-            d2.data.type === ComponentType.SYSTEM_ROOT
-              ? rootNodeBgColor
-              : nodeBgColor
+             d2.data.customBgColor || (d2.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
           )
           .attr(
             'stroke',
@@ -827,20 +838,30 @@ export const Diagram: React.FC<DiagramProps> = ({
       .style('cursor', () => isCleanView ? 'default' : 'move')
       .style('filter', (d) => {
           // Clean View Filter Highlight Logic
-          if (isCleanView && activeFilter !== 'none') {
-              if (activeFilter === 'meter' && d.data.hasMeter) return 'url(#filter-glow)';
-              if (activeFilter === 'generator' && d.data.hasGeneratorConnection) return 'url(#filter-glow)';
-              if (activeFilter === d.data.type) return 'url(#filter-glow)';
+          if (isCleanView && activeFilters.size > 0) {
+              const matches = 
+                  (activeFilters.has('meter') && d.data.hasMeter) || 
+                  (activeFilters.has('generator') && d.data.hasGeneratorConnection) ||
+                  (activeFilters.has('no-meter') && d.data.isExcludedFromMeter) ||
+                  (activeFilters.has('ac') && d.data.isAirConditioning) ||
+                  (activeFilters.has('reserved') && d.data.isReserved) ||
+                  (activeFilters.has(d.data.type));
+                  
+              if (matches) return 'url(#filter-glow)';
           }
           return null;
       })
       .style('opacity', (d) => {
         // Clean View Filter Dimming Logic
-        if (isCleanView && activeFilter !== 'none') {
-            const isMatch = (activeFilter === 'meter' && d.data.hasMeter) || 
-                            (activeFilter === 'generator' && d.data.hasGeneratorConnection) ||
-                            (activeFilter === d.data.type);
-            return isMatch ? 1 : 0.2;
+        if (isCleanView && activeFilters.size > 0) {
+            const matches = 
+                  (activeFilters.has('meter') && d.data.hasMeter) || 
+                  (activeFilters.has('generator') && d.data.hasGeneratorConnection) ||
+                  (activeFilters.has('no-meter') && d.data.isExcludedFromMeter) ||
+                  (activeFilters.has('ac') && d.data.isAirConditioning) ||
+                  (activeFilters.has('reserved') && d.data.isReserved) ||
+                  (activeFilters.has(d.data.type));
+            return matches ? 1 : 0.2;
         }
 
         if (!searchMatches) return 1;
@@ -864,10 +885,12 @@ export const Diagram: React.FC<DiagramProps> = ({
       });
 
     // Node Shape Rendering Logic
-    nodes.each(function (d: ExtendedHierarchyNode) {
+    nodes.each(function (d: any) {
       const nodeG = d3.select(this as SVGGElement);
       const shape = d.data.shape || 'rectangle';
       const box = getRectBox(d);
+      
+      const fill = d.data.customBgColor || (d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor);
 
       if (shape === 'circle') {
         nodeG
@@ -876,10 +899,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('r', 40)
           .attr('cx', 0)
           .attr('cy', 0)
-          .attr(
-            'fill',
-            d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor
-          )
+          .attr('fill', fill)
           .attr('stroke', (dAny: any) => {
             if (dAny.data.id === connectionSourceId) return '#f59e0b';
             if (
@@ -910,10 +930,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('x', -40)
           .attr('y', -40)
           .attr('rx', 4)
-          .attr(
-            'fill',
-            d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor
-          )
+          .attr('fill', fill)
           .attr('stroke', (dAny: any) => {
             if (dAny.data.id === connectionSourceId) return '#f59e0b';
             if (
@@ -938,10 +955,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('x', box.x)
           .attr('y', box.y)
           .attr('rx', 12)
-          .attr(
-            'fill',
-            d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor
-          )
+          .attr('fill', fill)
           .attr('stroke', (dAny: any) => {
             if (dAny.data.id === connectionSourceId) return '#f59e0b';
             if (
@@ -1196,105 +1210,151 @@ export const Diagram: React.FC<DiagramProps> = ({
       return box.y + box.h - 24;
     };
 
-    // Meter badges
-    nodes
-      .filter((d) => !!d.data.hasMeter)
-      .append('g')
-      .each(function (d) {
-        const gNode = d3.select(this as SVGGElement);
-
-        const text = gNode
+    // Helper to render badges
+    const renderBadge = (
+        gNode: d3.Selection<SVGGElement, unknown, null, undefined>, 
+        textValue: string, 
+        iconPath: string, 
+        color: string, 
+        bgColorLight: string, 
+        bgColorDark: string, 
+        d: ExtendedHierarchyNode,
+        xOffset: number
+    ) => {
+        const group = gNode.append('g');
+        
+        const text = group
           .append('text')
           .attr('y', 9)
           .attr('dominant-baseline', 'central')
           .style('font-size', '9px')
           .style('font-weight', 'bold')
-          .style('fill', '#3b82f6')
+          .style('fill', color)
           .style('direction', 'ltr')
-          .text(d.data.meterNumber || '');
+          .text(textValue || '');
 
         const textLen = text.node()?.getComputedTextLength() || 0;
-        const totalWidth =
-          20 + (d.data.meterNumber ? textLen + 6 : 0);
+        const totalWidth = 20 + (textValue ? textLen + 6 : 0);
 
         text.attr('x', 20);
 
-        gNode
+        group
           .insert('rect', 'text')
           .attr('height', 18)
           .attr('width', totalWidth)
           .attr('rx', 9)
-          .attr('fill', isDark ? '#1e3a8a' : '#dbeafe')
-          .attr('stroke', '#3b82f6')
+          .attr('fill', isDark ? bgColorDark : bgColorLight)
+          .attr('stroke', color)
           .attr('stroke-width', 0.5);
 
-        gNode
+        group
           .append('path')
-          .attr('d', ICON_PATHS['speed'])
+          .attr('d', iconPath)
           .attr('transform', 'translate(3, 3) scale(0.5)')
-          .attr('fill', '#3b82f6');
-
+          .attr('fill', color);
+        
         if (d.data.shape && d.data.shape !== 'rectangle') {
-          gNode.attr('transform', `translate(25, -35)`);
+             // For circle/square, stack or position manually if multiple
+             // This is simplified, just placing them roughly
+             group.attr('transform', `translate(${xOffset}, -35)`);
         } else {
-          gNode.attr(
-            'transform',
-            `translate(${getRectBox(d).x + 8}, ${getBadgeBaseY(d)})`
-          );
+             const box = getRectBox(d);
+             const y = getBadgeBaseY(d);
+             // Position from left + offset
+             group.attr('transform', `translate(${box.x + 8 + xOffset}, ${y})`);
         }
-      });
+        
+        return totalWidth;
+    };
 
-    // Generator badges
-    nodes
-      .filter((d) => !!d.data.hasGeneratorConnection)
-      .append('g')
-      .each(function (d) {
+
+    nodes.each(function(d: any) {
         const gNode = d3.select(this as SVGGElement);
+        let currentXOffset = 0;
 
-        const text = gNode
-          .append('text')
-          .attr('y', 9)
-          .attr('dominant-baseline', 'central')
-          .style('font-size', '9px')
-          .style('font-weight', 'bold')
-          .style('fill', '#ef4444')
-          .style('direction', 'ltr')
-          .text(d.data.generatorName || '');
-
-        const textLen = text.node()?.getComputedTextLength() || 0;
-        const totalWidth =
-          20 + (d.data.generatorName ? textLen + 6 : 0);
-
-        text.attr('x', 20);
-
-        gNode
-          .insert('rect', 'text')
-          .attr('height', 18)
-          .attr('width', totalWidth)
-          .attr('rx', 9)
-          .attr('fill', isDark ? '#7f1d1d' : '#fee2e2')
-          .attr('stroke', '#ef4444')
-          .attr('stroke-width', 0.5);
-
-        gNode
-          .append('path')
-          .attr('d', ICON_PATHS['letter_g'])
-          .attr('transform', 'translate(3, 3) scale(0.5)')
-          .attr('fill', '#ef4444');
-
-        if (d.data.shape && d.data.shape !== 'rectangle') {
-          gNode.attr(
-            'transform',
-            `translate(-${totalWidth + 25}, -35)`
-          );
-        } else {
-          const box = getRectBox(d);
-          const y = getBadgeBaseY(d);
-          gNode.attr(
-            'transform',
-            `translate(${box.x + box.w - totalWidth - 8}, ${y})`
-          );
+        // 1. Meter Badge
+        if (d.data.hasMeter) {
+            const w = renderBadge(
+                gNode, d.data.meterNumber || '', ICON_PATHS['speed'], 
+                '#3b82f6', '#dbeafe', '#1e3a8a', d, currentXOffset
+            );
+            currentXOffset += w + 5;
         }
+
+        // 2. Generator Badge
+        if (d.data.hasGeneratorConnection) {
+            const w = renderBadge(
+                gNode, d.data.generatorName || '', ICON_PATHS['letter_g'], 
+                '#ef4444', '#fee2e2', '#7f1d1d', d, currentXOffset
+            );
+            currentXOffset += w + 5;
+        }
+
+        // 3. No Meter Badge
+        if (d.data.isExcludedFromMeter) {
+             const w = renderBadge(
+                gNode, '', ICON_PATHS['power_off'],
+                '#64748b', '#f1f5f9', '#334155', d, currentXOffset
+            );
+            currentXOffset += w + 5;
+        }
+
+        // 4. A/C Badge
+        if (d.data.isAirConditioning) {
+             const w = renderBadge(
+                gNode, '', ICON_PATHS['ac_unit'],
+                '#06b6d4', '#cffafe', '#155e75', d, currentXOffset
+            );
+            currentXOffset += w + 5;
+        }
+
+        // 5. Reserved Badge
+        if (d.data.isReserved) {
+             const w = renderBadge(
+                gNode, '', ICON_PATHS['lock'],
+                '#eab308', '#fef9c3', '#713f12', d, currentXOffset
+            );
+            currentXOffset += w + 5;
+        }
+    });
+
+
+    // Calculated Load Badge
+    nodes
+      .filter((d) => d.data.calculatedLoad && (d.data.calculatedLoad.amps > 0 || d.data.calculatedLoad.kva > 0))
+      .append('g')
+      .each(function(d: any) {
+          const gNode = d3.select(this as SVGGElement);
+          const load = d.data.calculatedLoad!;
+          const textVal = `∑ ${load.amps}A`;
+
+          const text = gNode.append('text')
+              .attr('y', -8)
+              .attr('text-anchor', 'middle')
+              .style('font-size', '10px')
+              .style('font-weight', 'bold')
+              .style('fill', '#a855f7')
+              .text(textVal);
+          
+          const textLen = text.node()?.getComputedTextLength() || 0;
+          const w = textLen + 8;
+          
+          gNode.insert('rect', 'text')
+              .attr('x', -w/2)
+              .attr('y', -18)
+              .attr('width', w)
+              .attr('height', 14)
+              .attr('rx', 4)
+              .attr('fill', isDark ? '#3b0764' : '#f3e8ff')
+              .attr('stroke', '#a855f7')
+              .attr('stroke-width', 1);
+
+          if (d.data.shape === 'circle' || d.data.shape === 'square') {
+               gNode.attr('transform', `translate(0, -45)`);
+          } else {
+              const box = getRectBox(d);
+              gNode.attr('transform', `translate(${box.x + box.w/2}, ${box.y})`);
+          }
       });
 
     // Action buttons (Conditional based on Clean View)
@@ -1828,8 +1888,17 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     // Legend
     const types = Object.values(ComponentType);
+    const badgeItems = [
+      { label: t.legend.meter, icon: 'speed', color: '#3b82f6' },
+      { label: t.legend.generator, icon: 'letter_g', color: '#ef4444' },
+      { label: t.legend.noMeter, icon: 'power_off', color: '#64748b' },
+      { label: t.legend.ac, icon: 'ac_unit', color: '#06b6d4' },
+      { label: t.legend.reserved, icon: 'lock', color: '#eab308' }
+    ];
+
+    const totalLegendItems = types.length + badgeItems.length + 1; // +1 for spacing/separator
     const legendW = 200;
-    const legendH = 50 + types.length * 25;
+    const legendH = 50 + totalLegendItems * 25;
 
     let legX: number;
     let legY: number;
@@ -1871,6 +1940,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('font-size', '12px')
       .text(t.legend.title);
 
+    // Render Components
     types.forEach((type, i) => {
       const y = 50 + i * 25;
       const config = COMPONENT_CONFIG[type];
@@ -1914,6 +1984,62 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('text-anchor', textAnchor)
         .text(t.componentTypes[type]);
     });
+
+    // Separator line
+    const sepY = 50 + types.length * 25 + 10;
+    legendG.append('line')
+       .attr('x1', 20)
+       .attr('y1', sepY)
+       .attr('x2', legendW - 20)
+       .attr('y2', sepY)
+       .attr('stroke', secondaryTextColor)
+       .attr('stroke-width', 1)
+       .attr('opacity', 0.5);
+
+    // Render Status Badges
+    badgeItems.forEach((item, i) => {
+        const y = sepY + 20 + i * 25;
+        let iconX: number;
+        let textX: number;
+        let textAnchor: 'start' | 'middle' | 'end';
+
+        if (isRTL) {
+            iconX = legendW - 25;
+            textX = legendW / 2;
+            textAnchor = 'middle';
+        } else {
+            iconX = 25;
+            textX = 45;
+            textAnchor = 'start';
+        }
+
+        // Mimic badge style
+        legendG.append('rect')
+            .attr('x', iconX - 10)
+            .attr('y', y - 9)
+            .attr('width', 20)
+            .attr('height', 18)
+            .attr('rx', 9)
+            .attr('fill', isDark ? '#1e293b' : '#f1f5f9')
+            .attr('stroke', item.color)
+            .attr('stroke-width', 0.5);
+
+        legendG.append('path')
+            .attr('d', ICON_PATHS[item.icon])
+            .attr('transform', `translate(${iconX - 6}, ${y - 6}) scale(0.5)`)
+            .attr('fill', item.color);
+
+        legendG
+            .append('text')
+            .attr('x', textX)
+            .attr('y', y)
+            .attr('dominant-baseline', 'middle')
+            .attr('fill', textColor)
+            .attr('font-size', '11px')
+            .attr('text-anchor', textAnchor)
+            .text(item.label);
+    });
+
   }, [
     data,
     dimensions,
@@ -1942,7 +2068,7 @@ export const Diagram: React.FC<DiagramProps> = ({
     onNodeMove,
     onDisconnectLink,
     isCleanView,
-    activeFilter,
+    activeFilters,
     annotations,
     isAnnotating,
     annotationColor

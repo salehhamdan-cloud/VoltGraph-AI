@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { ElectricalNode, AnalysisResult } from "../types";
 
@@ -64,8 +63,9 @@ export const analyzeCircuit = async (nodes: ElectricalNode[]): Promise<AnalysisR
       }
     });
 
-    if (response.text) {
-      return JSON.parse(response.text) as AnalysisResult;
+    const text = response.text;
+    if (text) {
+      return JSON.parse(text) as AnalysisResult;
     }
     
     throw new Error("Empty response from AI");

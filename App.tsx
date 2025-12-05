@@ -139,7 +139,9 @@ export default function App() {
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [printSettingsFocus, setPrintSettingsFocus] = useState<string | undefined>(undefined);
   const [isCleanView, setIsCleanView] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<string>('none');
+  
+  // Clean View Filters (Multi-select)
+  const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   
   // Annotation State
   const [annotations, setAnnotations] = useState<{id: string, path: string, color: string}[]>([]);
@@ -191,6 +193,18 @@ export default function App() {
   };
 
   const handleClearAnnotations = () => setAnnotations([]);
+  
+  const toggleFilter = (filterKey: string) => {
+      setActiveFilters(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(filterKey)) {
+              newSet.delete(filterKey);
+          } else {
+              newSet.add(filterKey);
+          }
+          return newSet;
+      });
+  };
 
   const saveToHistory = useCallback(() => {
     setHistory(prev => [...prev, JSON.parse(JSON.stringify(projects))]);
@@ -493,7 +507,7 @@ export default function App() {
   useEffect(() => {
       // Reset filter when exiting clean view
       if (!isCleanView) {
-          setActiveFilter('none');
+          setActiveFilters(new Set());
           setIsAnnotating(false);
       }
   }, [isCleanView]);
@@ -697,10 +711,14 @@ export default function App() {
             kva: data.kva,
             description: data.description,
             customColor: data.customColor,
+            customBgColor: data.customBgColor,
             hasMeter: data.hasMeter,
             meterNumber: data.meterNumber,
             hasGeneratorConnection: data.hasGeneratorConnection,
             generatorName: data.generatorName,
+            isExcludedFromMeter: data.isExcludedFromMeter,
+            isAirConditioning: data.isAirConditioning,
+            isReserved: data.isReserved,
             shape: data.shape,
             customImage: data.customImage,
             children: [],
@@ -762,10 +780,14 @@ export default function App() {
             kva: data.kva,
             description: data.description,
             customColor: data.customColor,
+            customBgColor: data.customBgColor,
             hasMeter: data.hasMeter,
             meterNumber: data.meterNumber,
             hasGeneratorConnection: data.hasGeneratorConnection,
             generatorName: data.generatorName,
+            isExcludedFromMeter: data.isExcludedFromMeter,
+            isAirConditioning: data.isAirConditioning,
+            isReserved: data.isReserved,
             shape: data.shape,
             customImage: data.customImage
         }));
@@ -855,7 +877,8 @@ export default function App() {
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
         // Ensure message is a string to avoid type errors
-        const notFoundVal = (t.dialogs && t.dialogs.diagramNotFound) ? String(t.dialogs.diagramNotFound) : "Diagram not found.";
+        const diagNotFound: any = t.dialogs?.diagramNotFound;
+        const notFoundVal: string = typeof diagNotFound === 'string' ? diagNotFound : "Diagram not found.";
         alert(notFoundVal);
         return;
     }
@@ -866,9 +889,7 @@ export default function App() {
       const result = await analyzeCircuit(activePage.items);
       setAnalysisResult(result);
     } catch (err: any) {
-      // Explicitly handle unknown error type
-      const error = err as any;
-      const message: string = error instanceof Error ? error.message : String(error);
+      const message = err instanceof Error ? err.message : String(err);
       console.error(message);
     } finally {
       setIsAnalyzing(false);
@@ -1470,24 +1491,45 @@ export default function App() {
             {/* Clean View Controls */}
             {isCleanView && (
                 <div className="absolute top-4 right-4 z-50 flex items-center gap-2 bg-slate-900/80 backdrop-blur-md p-2 rounded-xl border border-slate-700 shadow-2xl">
-                    <div className="flex items-center gap-1 border-r border-slate-700 pr-2 mr-2">
-                        <span className="material-icons-round text-slate-500 text-sm">filter_alt</span>
-                        <select
-                            value={activeFilter}
-                            onChange={(e) => setActiveFilter(e.target.value as any)}
-                            className="bg-slate-800 text-slate-300 text-sm border border-slate-700 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[150px]"
-                        >
-                            <option value="none">{t.filters.none}</option>
-                            <optgroup label={t.filters.title}>
-                                <option value="meter">{t.filters.meter}</option>
-                                <option value="generator">{t.filters.generator}</option>
-                            </optgroup>
-                            <optgroup label={t.filters.byType}>
-                                {Object.values(ComponentType).map(type => (
-                                    <option key={type} value={type}>{t.componentTypes[type]}</option>
+                    <div className="flex items-center gap-1 border-r border-slate-700 pr-2 mr-2 relative group">
+                        <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm border border-slate-700 rounded-lg transition-colors">
+                            <span className="material-icons-round text-slate-500 text-sm">filter_alt</span>
+                            <span>{t.filters.title} {activeFilters.size > 0 && `(${activeFilters.size})`}</span>
+                            <span className="material-icons-round text-sm">expand_more</span>
+                        </button>
+                        
+                        {/* Multi-Select Dropdown Content */}
+                        <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl hidden group-hover:block p-2 max-h-80 overflow-y-auto">
+                            <div className="space-y-1">
+                                <div className="px-2 py-1 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.filters.title}</div>
+                                {['meter', 'no-meter', 'generator', 'ac', 'reserved'].map(key => (
+                                    <label key={key} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-700 rounded cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={activeFilters.has(key)}
+                                            onChange={() => toggleFilter(key)}
+                                            className="rounded bg-slate-900 border-slate-600 text-blue-600 focus:ring-offset-slate-800"
+                                        />
+                                        <span className="text-sm text-slate-300">{t.filters[key === 'no-meter' ? 'noMeter' : key]}</span>
+                                    </label>
                                 ))}
-                            </optgroup>
-                        </select>
+                                
+                                <div className="border-t border-slate-700 my-2"></div>
+                                <div className="px-2 py-1 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.filters.byType}</div>
+                                
+                                {Object.values(ComponentType).map(type => (
+                                    <label key={type} className="flex items-center gap-2 px-2 py-1.5 hover:bg-slate-700 rounded cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={activeFilters.has(type)}
+                                            onChange={() => toggleFilter(type)}
+                                            className="rounded bg-slate-900 border-slate-600 text-blue-600 focus:ring-offset-slate-800"
+                                        />
+                                        <span className="text-sm text-slate-300">{t.componentTypes[type]}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        </div>
                     </div>
 
                     <button
@@ -1590,7 +1632,7 @@ export default function App() {
                     language={language}
                     theme={theme}
                     isCleanView={isCleanView}
-                    activeFilter={activeFilter as any}
+                    activeFilters={activeFilters}
                     annotations={annotations}
                     isAnnotating={isAnnotating}
                     annotationColor={annotationColor}

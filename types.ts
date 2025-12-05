@@ -14,7 +14,7 @@ export enum ComponentType {
 
 export interface ConnectionStyle {
   strokeColor?: string;
-  lineStyle?: 'solid' | 'dashed' | 'dotted';
+  lineStyle?: 'solid' | 'dashed' | 'dotted' | 'dash-dot' | 'long-dash';
   startMarker?: 'none' | 'arrow' | 'circle' | 'diamond';
   endMarker?: 'none' | 'arrow' | 'circle' | 'diamond';
   cableSize?: string; // Cable size text (e.g., "4x25mm")
@@ -34,17 +34,29 @@ export interface ElectricalNode {
   description?: string;
   
   // Appearance
-  customColor?: string;
+  customColor?: string; // Stroke/Icon Color
+  customBgColor?: string; // Background Fill Color
   shape?: NodeShape; // Visual shape: rectangle, circle, square
   customImage?: string; // Base64 string for custom icon
 
   // Meter Property
   hasMeter?: boolean;
   meterNumber?: string;
+  isExcludedFromMeter?: boolean; // New: Not Connected to Meter
   
   // Generator Connection Property
   hasGeneratorConnection?: boolean;
   generatorName?: string;
+
+  // Specific Attributes
+  isAirConditioning?: boolean; // New: A/C Breaker
+  isReserved?: boolean; // New: Reserved Breaker
+
+  // Calculated Property (Recursive Load)
+  calculatedLoad?: {
+    amps: number;
+    kva: number;
+  };
 
   // Positioning (Offset from tree layout)
   manualX?: number;
@@ -66,12 +78,16 @@ export interface NewNodeData {
   kva?: number;
   description?: string;
   customColor?: string;
+  customBgColor?: string;
   shape?: NodeShape;
   customImage?: string;
   hasMeter?: boolean;
   meterNumber?: string;
+  isExcludedFromMeter?: boolean;
   hasGeneratorConnection?: boolean;
   generatorName?: string;
+  isAirConditioning?: boolean;
+  isReserved?: boolean;
 }
 
 export interface Page {
