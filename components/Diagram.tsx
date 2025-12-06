@@ -160,8 +160,8 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     // Background click handler
     svg.on('click', (event) => {
-      if (event.defaultPrevented) return; // Zoom drag
-      if (isCleanView && !isAnnotating) return; // Disable selection in clean view
+      if (event.defaultPrevented) return;
+      if (isCleanView && !isAnnotating) return;
       onBackgroundClick?.();
     });
 
@@ -180,7 +180,6 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('r', 1)
       .attr('fill', dotColor);
       
-    // Glow filter for Clean View highlighting
     const filter = defs.append('filter')
         .attr('id', 'filter-glow')
         .attr('x', '-50%')
@@ -202,26 +201,17 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const { width, height } = dimensions;
 
-    // --- Annotation Layer (Drawing) ---
-    // Render existing annotations
-    const annotationGroup = svg.append('g').attr('class', 'annotations');
-    
-    // We need annotations to zoom with the graph, so we'll append them to the main 'g' later
-    // But for capturing mouse events for drawing, we need an overlay.
-    
     if (isAnnotating) {
         svg.style('cursor', 'crosshair');
-        
-        // Transparent overlay for capturing drawing events
         svg.append('rect')
            .attr('width', '100%')
            .attr('height', '100%')
            .attr('fill', 'transparent')
            .on('mousedown', function(event) {
-               const coords = d3.pointer(event, g.node()); // Get coords relative to zoomable group
+               const coords = d3.pointer(event, g.node());
                let currentPath = `M ${coords[0]} ${coords[1]}`;
                
-               const pathEl = g.append('path') // Append to zoomable group
+               const pathEl = g.append('path')
                    .attr('class', 'temp-drawing')
                    .attr('d', currentPath)
                    .attr('stroke', annotationColor)
@@ -239,7 +229,7 @@ export const Diagram: React.FC<DiagramProps> = ({
                    .on('mouseup', () => {
                        d3.select(this).on('mousemove', null).on('mouseup', null);
                        if (onAnnotationAdd) onAnnotationAdd(currentPath, annotationColor);
-                       pathEl.remove(); // Remove temp, App state will re-render permanent one
+                       pathEl.remove();
                    });
            });
     }
@@ -262,7 +252,6 @@ export const Diagram: React.FC<DiagramProps> = ({
           onAddRoot && onAddRoot();
         });
 
-      // Simple domain icon path for empty state
       g.append('path')
         .attr('d', "M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z")
         .attr('transform', 'translate(-16, -16) scale(1.33)')
@@ -385,6 +374,9 @@ export const Diagram: React.FC<DiagramProps> = ({
       const compNum = d.data.componentNumber || t.componentTypes[d.data.type] || d.data.type;
       const model = d.data.model || '';
       const desc = getTranslatedDescription(d.data.description);
+      
+      const descLines = desc.length > 25 ? Math.ceil(desc.length / 25) : 1;
+      const descLen = Math.min(desc.length * 7, 220);
 
       let specText = '';
       if (d.data.amps) specText += `${d.data.amps}A`;
@@ -396,8 +388,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       const typeLen = (compNum?.length || 0) * 7.5;
       const specLen = specText.length * 7.5;
       const modelLen = model.length * 7;
-      const descLen = Math.min(desc.length * 7, 220);
-
+      
       let badgeWidth = 0;
       if (d.data.hasMeter) {
         tempText.text(d.data.meterNumber || '');
@@ -412,7 +403,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         badgeWidth += totalW;
       }
       
-      // Approximate badge widths for new icons
       if (d.data.isExcludedFromMeter) badgeWidth += 24;
       if (d.data.isAirConditioning) badgeWidth += 24;
       if (d.data.isReserved) badgeWidth += 24;
@@ -430,12 +420,12 @@ export const Diagram: React.FC<DiagramProps> = ({
       );
       const nodeW = contentWidth + 30;
 
-      let contentHeight = 25; // Icon area
-      contentHeight += 24; // Title
-      contentHeight += 16; // Type/Number
+      let contentHeight = 25; 
+      contentHeight += 24; 
+      contentHeight += 16; 
       if (specText) contentHeight += 14;
       if (model) contentHeight += 14;
-      if (desc) contentHeight += 14;
+      if (desc) contentHeight += (14 * descLines); 
       
       if (d.data.hasMeter || d.data.hasGeneratorConnection || d.data.isExcludedFromMeter || d.data.isAirConditioning || d.data.isReserved) contentHeight += 26;
       contentHeight += 12;
@@ -545,7 +535,6 @@ export const Diagram: React.FC<DiagramProps> = ({
       }
     });
 
-    // Render Annotations
     if (annotations.length > 0) {
         annotations.forEach(ant => {
             g.append('path')
@@ -560,6 +549,8 @@ export const Diagram: React.FC<DiagramProps> = ({
     }
 
     const linksGroup = g.append('g').attr('class', 'links');
+    const nodesGroup = g.append('g').attr('class', 'nodes');
+    const labelsGroup = g.append('g').attr('class', 'labels');
 
     const drag = d3
       .drag<SVGGElement, ExtendedHierarchyNode>()
@@ -736,32 +727,80 @@ export const Diagram: React.FC<DiagramProps> = ({
         onLinkClick(d.source.data.id, d.target.data.id);
       });
 
-    // Helper to render Icons (handles both simple strings and complex array icons)
     const renderIcon = (parent: d3.Selection<SVGGElement, unknown, null, undefined>, iconName: string, color: string, defaultTransform: string) => {
         const iconData = ICON_PATHS[iconName] || ICON_PATHS['help'];
         
         if (Array.isArray(iconData)) {
-             // Complex multi-path icon (e.g., 512x512)
-             const normScale = 24 / 512;
-             
+             const normScale = 24 / 512; 
              iconData.forEach((path: any) => {
                  parent.append('path')
                     .attr('d', path.d)
                     .attr('fill', path.fill || color)
-                    // Apply defaultTransform first to position/size the container, 
-                    // then normalize 512->24, then apply icon internal transform
                     .attr('transform', `${defaultTransform} scale(${normScale}) ${path.transform || ''}`);
              });
         } else {
-            // Standard single path string
             parent.append('path')
                 .attr('d', iconData)
                 .attr('transform', defaultTransform)
                 .attr('fill', color);
         }
     };
+    
+    // ACTION BUTTONS RENDERER
+    const renderActionButtons = (nodeG: d3.Selection<SVGGElement, unknown, null, undefined>, d: ExtendedHierarchyNode, isPermanent: boolean = false) => {
+        nodeG.selectAll('.action-buttons').remove();
+        if (isCleanView) return;
 
-    const nodes = g
+        const actionsG = nodeG.append('g')
+            .attr('class', 'action-buttons')
+            .attr('opacity', isPermanent ? 1 : 0);
+
+        const box = getRectBox(d);
+        const btnY = box.y - 20; 
+        const centerX = box.x + box.w / 2;
+
+        // Delete Button
+        const deleteBtn = actionsG.append('g')
+            .attr('transform', `translate(${centerX - 24}, ${btnY})`)
+            .style('cursor', 'pointer')
+            .on('click', (e) => {
+                e.stopPropagation();
+                onDeleteNode(d.data);
+            });
+        deleteBtn.append('circle').attr('r', 8).attr('fill', '#ef4444');
+        deleteBtn.append('path').attr('d', 'M-2.5,-2.5 L2.5,2.5 M-2.5,2.5 L2.5,-2.5').attr('stroke', 'white').attr('stroke-width', 1.5);
+
+        // Duplicate Button
+        const dupBtn = actionsG.append('g')
+            .attr('transform', `translate(${centerX}, ${btnY})`)
+            .style('cursor', 'pointer')
+            .on('click', (e) => {
+                e.stopPropagation();
+                onDuplicateChild(d.data);
+            });
+        dupBtn.append('circle').attr('r', 8).attr('fill', '#3b82f6');
+        dupBtn.append('path').attr('d', 'M-3,3 L-3,-3 L3,-3 L3,3 Z M0,-3 L0,3 M-3,0 L3,0').attr('stroke', 'white').attr('stroke-width', 1.5).attr('fill', 'none');
+
+        // Group/Collapse Button (if has children)
+        if (d.children && d.children.length > 0) {
+             const collapseBtn = actionsG.append('g')
+                .attr('transform', `translate(${centerX + 24}, ${btnY})`)
+                .style('cursor', 'pointer')
+                .on('click', (e) => {
+                    e.stopPropagation();
+                    onToggleCollapse(d.data);
+                });
+             collapseBtn.append('circle').attr('r', 8).attr('fill', '#f59e0b');
+             collapseBtn.append('path').attr('d', 'M-4,0 L4,0').attr('stroke', 'white').attr('stroke-width', 1.5);
+        }
+
+        if (!isPermanent) {
+            actionsG.transition().duration(200).attr('opacity', 1);
+        }
+    };
+
+    // 1. Render Nodes
+    const nodesSelection = nodesGroup
       .selectAll<SVGGElement, ExtendedHierarchyNode>('g.node')
       .data(nodesToRender)
       .enter()
@@ -809,10 +848,20 @@ export const Diagram: React.FC<DiagramProps> = ({
           .duration(200)
           .attr('fill', hoverFill)
           .attr('stroke', isSource ? '#f59e0b' : isSelected ? '#3b82f6' : '#64748b');
+
+        // Only show hover buttons if NOT already selected (since selected ones are permanent)
+        if (!isSelected) {
+            renderActionButtons(el, d, false);
+        }
       })
       .on('mouseleave', function (event, d: ExtendedHierarchyNode) {
         const el = d3.select(this as SVGGElement);
         const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
+        
+        // Remove Action Buttons ONLY if not selected (Permanent buttons stay)
+        if (!isSelected) {
+            el.selectAll('.action-buttons').transition().duration(200).attr('opacity', 0).remove();
+        }
         
         if (isCleanView) return;
         
@@ -860,8 +909,14 @@ export const Diagram: React.FC<DiagramProps> = ({
         return 0.2;
       });
 
-    nodes.each(function (d: any) {
+    nodesSelection.each(function (d: any) {
       const nodeG = d3.select(this as SVGGElement);
+      
+      // Permanently render action buttons if selected
+      if (d.data.id === selectedNodeId) {
+          renderActionButtons(nodeG, d, true);
+      }
+
       const shape = d.data.shape || 'rectangle';
       const box = getRectBox(d);
       
@@ -931,7 +986,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       }
     });
 
-    const contentG = nodes.append('g')
+    const contentG = nodesSelection.append('g')
       .attr('transform', (d) => {
         const shape = d.data.shape || 'rectangle';
         const box = getRectBox(d);
@@ -1032,21 +1087,46 @@ export const Diagram: React.FC<DiagramProps> = ({
             .style('fill', secondaryTextColor)
             .text(d.data.model);
         }
+        
+        // Multi-line Description Handling
         const desc = getTranslatedDescription(d.data.description);
         if (desc) {
           yOffset += 14;
-          el.append('text')
+          const maxLength = 25;
+          const lines = [];
+          if (desc.length > maxLength) {
+              // Split logic
+              const mid = Math.ceil(desc.length / 2);
+              const splitIndex = desc.indexOf(' ', mid);
+              if (splitIndex !== -1 && splitIndex < desc.length - 5) {
+                 lines.push(desc.substring(0, splitIndex));
+                 lines.push(desc.substring(splitIndex + 1));
+              } else {
+                 lines.push(desc.substring(0, maxLength));
+                 lines.push(desc.substring(maxLength));
+              }
+          } else {
+              lines.push(desc);
+          }
+          
+          const textEl = el.append('text')
             .attr('x', 0)
             .attr('y', yOffset)
             .attr('text-anchor', 'middle')
             .style('font-size', '10px')
-            .style('fill', secondaryTextColor)
-            .text(desc.length > 30 ? desc.substring(0, 28) + '...' : desc);
+            .style('fill', secondaryTextColor);
+
+          lines.forEach((line, i) => {
+              textEl.append('tspan')
+                  .attr('x', 0)
+                  .attr('dy', i === 0 ? 0 : '1.2em')
+                  .text(line);
+          });
         }
       }
     });
 
-    nodes
+    nodesSelection
       .filter((d) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
       .append('circle')
       .attr('r', 8)
@@ -1076,7 +1156,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           onToggleCollapse(d.data);
       });
 
-    nodes
+    nodesSelection
       .filter((d) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
       .append('text')
       .attr('text-anchor', 'middle')
@@ -1157,7 +1237,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         return totalWidth;
     };
 
-    nodes.each(function(d: any) {
+    nodesSelection.each(function(d: any) {
         const gNode = d3.select(this as SVGGElement);
         let currentXOffset = 0;
 
@@ -1180,6 +1260,59 @@ export const Diagram: React.FC<DiagramProps> = ({
         if (d.data.isReserved) {
              const w = renderBadge(gNode, '', 'lock', '#eab308', '#fef9c3', '#713f12', d, currentXOffset);
             currentXOffset += w + 5;
+        }
+    });
+
+    // 2. Render Cable Size Labels (Fixed Positioning)
+    linksToRender.forEach((d: any) => {
+        const cableText = d.target.data.connectionStyle?.cableSize;
+        if (cableText) {
+            const stroke = d.target.data.connectionStyle?.strokeColor || d.target.data.customColor || COMPONENT_CONFIG[d.target.data.type]?.color || linkColor;
+            const tXOffset = d.target.data.manualX || 0;
+            const tYOffset = d.target.data.manualY || 0;
+            
+            const tgtX = orientation === 'horizontal' ? d.target.y + tXOffset : d.target.x + tXOffset;
+            const tgtY = orientation === 'horizontal' ? d.target.x + tYOffset : d.target.y + tYOffset;
+
+            const labelG = labelsGroup.append('g');
+            let xPos = tgtX;
+            let yPos = tgtY;
+            let rotation = 0;
+            let textAnchor = 'end';
+
+            if (orientation === 'horizontal') {
+                 // Push label to the LEFT of the node in ALL languages for consistency
+                 xPos = tgtX - 25; 
+                 yPos = tgtY - 8;
+                 textAnchor = 'end'; 
+            } else {
+                 xPos = tgtX - 5; 
+                 yPos = tgtY - 35; // Moved closer (was -70, now -35)
+                 rotation = -90;
+                 textAnchor = 'start'; 
+            }
+
+            labelG.attr('transform', `translate(${xPos}, ${yPos}) rotate(${rotation})`);
+
+            const txt = labelG.append('text')
+               .attr('text-anchor', textAnchor)
+               .style('font-size', '10px')
+               .style('font-weight', 'bold')
+               .style('fill', '#ffffff')
+               .style('direction', 'ltr') 
+               .text(cableText);
+
+            const bbox = txt.node()?.getBBox();
+            if (bbox) {
+                 labelG.insert('rect', 'text')
+                    .attr('x', bbox.x - 4)
+                    .attr('y', bbox.y - 2)
+                    .attr('width', bbox.width + 8)
+                    .attr('height', bbox.height + 4)
+                    .attr('rx', 4)
+                    .attr('fill', stroke)
+                    .style('opacity', 0.9);
+            }
         }
     });
 
@@ -1240,16 +1373,103 @@ export const Diagram: React.FC<DiagramProps> = ({
     let legX: number;
     let legY: number;
 
-    if (isPrintMode && activeProject) {
-      const blockW = 500;
-      const blockH = 100;
-      const xStart = maxX + 40;
-      const yStart = maxY + 40 - blockH;
-      legX = xStart + blockW - legendW;
-      legY = yStart - legendH - 10;
-    } else {
-      legX = maxX + 50;
-      legY = minY;
+    // Standard positioning (Edit Mode): Top-Right of content
+    legX = maxX + 50;
+    legY = minY;
+
+    // Print Mode Positioning (Bottom-Right, Below Nodes)
+    if (isPrintMode && activeProject && activeProject.printMetadata) {
+        const blockW = 500;
+        const blockH = 100;
+        
+        // Calculate safe Y below all nodes
+        const safeY = maxY + 60; // 60px margin below lowest node
+        
+        // Align Right edge of Legend with Right edge of Diagram (maxX)
+        // If diagram is narrow, align with minX + width
+        legX = Math.max(minX, maxX - legendW);
+        legY = safeY;
+        
+        // Title Block below Legend
+        // Align Right edge of Title Block with Right edge of Diagram (maxX)
+        const titleX = Math.max(minX, maxX - blockW);
+        const titleY = legY + legendH + 20;
+
+        const titleBlockG = g.append('g')
+            .attr('transform', `translate(${titleX}, ${titleY})`)
+            .attr('class', 'print-title-block')
+            .style('cursor', 'pointer');
+
+        // Background rect
+        titleBlockG.append('rect')
+            .attr('width', blockW)
+            .attr('height', blockH)
+            .attr('fill', 'white')
+            .attr('stroke', 'black')
+            .attr('stroke-width', 2)
+            .style('pointer-events', 'all')
+            .on('click', (event) => {
+                if(event.defaultPrevented) return;
+                event.stopPropagation();
+                if(onEditPrintSettings) onEditPrintSettings();
+            });
+
+        // Horizontal dividers
+        titleBlockG.append('line').attr('x1', 0).attr('y1', 33).attr('x2', blockW).attr('y2', 33).attr('stroke', 'black').attr('stroke-width', 1);
+        titleBlockG.append('line').attr('x1', 0).attr('y1', 66).attr('x2', blockW).attr('y2', 66).attr('stroke', 'black').attr('stroke-width', 1);
+
+        // Vertical divider
+        const dividerX = isRTL ? 150 : 350;
+        titleBlockG.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', 100).attr('stroke', 'black').attr('stroke-width', 1);
+
+        const pm = activeProject.printMetadata;
+
+        const renderField = (label: string, value: string, x: number, y: number, w: number, fieldKey: string) => {
+            const cell = titleBlockG.append('g').on('click', (e) => {
+                if(e.defaultPrevented) return;
+                e.stopPropagation();
+                if(onEditPrintSettings) onEditPrintSettings(fieldKey);
+            });
+            
+            // Invisible rect for click target
+            cell.append('rect')
+                .attr('x', x - w/2)
+                .attr('y', y - 15)
+                .attr('width', w)
+                .attr('height', 30)
+                .attr('fill', 'transparent')
+                .style('pointer-events', 'all');
+
+            cell.append('text')
+                .attr('x', x)
+                .attr('y', y - 8)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '8px')
+                .style('fill', '#666')
+                .style('pointer-events', 'none')
+                .text(label);
+            
+            cell.append('text')
+                .attr('x', x)
+                .attr('y', y + 8)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '12px')
+                .style('font-weight', 'bold')
+                .style('fill', 'black')
+                .style('pointer-events', 'none')
+                .text(value || '-');
+        };
+
+        const wideCenter = isRTL ? (150 + blockW) / 2 : 350 / 2;
+        const narrowCenter = isRTL ? 150 / 2 : (350 + blockW) / 2;
+
+        renderField(t.printLayout.project, activeProject.name, wideCenter, 16, 300, 'projectName');
+        renderField(t.printLayout.org, pm.organization, wideCenter, 50, 300, 'organization');
+        renderField(t.printLayout.engineer, pm.engineer, wideCenter, 84, 300, 'engineer');
+
+        renderField(t.printLayout.date, pm.date, narrowCenter, 16, 140, 'date');
+        renderField(t.printLayout.rev, pm.revision, narrowCenter, 50, 140, 'revision');
+        renderField(t.printLayout.approved, pm.approvedBy, narrowCenter, 84, 140, 'approvedBy');
     }
 
     const legendG = g
@@ -1362,94 +1582,6 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('text-anchor', textAnchor)
             .text(item.label);
     });
-
-    // Print Title Block
-    if (isPrintMode && activeProject && activeProject.printMetadata) {
-        const blockW = 500;
-        const blockH = 100;
-        
-        const xStart = maxX + 40;
-        const yStart = maxY + 40;
-
-        const titleBlockG = g.append('g')
-            .attr('transform', `translate(${xStart}, ${yStart})`)
-            .attr('class', 'print-title-block')
-            .style('cursor', 'pointer');
-
-        // Background rect to capture clicks
-        titleBlockG.append('rect')
-            .attr('width', blockW)
-            .attr('height', blockH)
-            .attr('fill', 'white')
-            .attr('stroke', 'black')
-            .attr('stroke-width', 2)
-            .style('pointer-events', 'all')
-            .on('click', (event) => {
-                if(event.defaultPrevented) return;
-                event.stopPropagation();
-                if(onEditPrintSettings) onEditPrintSettings();
-            });
-
-        // Horizontal dividers
-        titleBlockG.append('line').attr('x1', 0).attr('y1', 33).attr('x2', blockW).attr('y2', 33).attr('stroke', 'black').attr('stroke-width', 1);
-        titleBlockG.append('line').attr('x1', 0).attr('y1', 66).attr('x2', blockW).attr('y2', 66).attr('stroke', 'black').attr('stroke-width', 1);
-
-        // Vertical divider
-        const dividerX = isRTL ? 150 : 350;
-        titleBlockG.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', 100).attr('stroke', 'black').attr('stroke-width', 1);
-
-        const pm = activeProject.printMetadata;
-
-        const renderField = (label: string, value: string, x: number, y: number, w: number, fieldKey: string) => {
-            const cell = titleBlockG.append('g').on('click', (e) => {
-                if(e.defaultPrevented) return;
-                e.stopPropagation();
-                if(onEditPrintSettings) onEditPrintSettings(fieldKey);
-            });
-            
-            // Invisible rect for click target
-            cell.append('rect')
-                .attr('x', x - w/2)
-                .attr('y', y - 15)
-                .attr('width', w)
-                .attr('height', 30)
-                .attr('fill', 'transparent')
-                .style('pointer-events', 'all');
-
-            cell.append('text')
-                .attr('x', x)
-                .attr('y', y - 8)
-                .attr('text-anchor', 'middle')
-                .style('font-size', '8px')
-                .style('fill', '#666')
-                .style('pointer-events', 'none')
-                .text(label);
-            
-            cell.append('text')
-                .attr('x', x)
-                .attr('y', y + 8)
-                .attr('text-anchor', 'middle')
-                .style('font-size', '12px')
-                .style('font-weight', 'bold')
-                .style('fill', 'black')
-                .style('pointer-events', 'none')
-                .text(value || '-');
-        };
-
-        // Coordinates based on RTL/LTR layout
-        // Wide column center:
-        const wideCenter = isRTL ? (150 + blockW) / 2 : 350 / 2;
-        // Narrow column center:
-        const narrowCenter = isRTL ? 150 / 2 : (350 + blockW) / 2;
-
-        renderField(t.printLayout.project, activeProject.name, wideCenter, 16, 300, 'projectName');
-        renderField(t.printLayout.org, pm.organization, wideCenter, 50, 300, 'organization');
-        renderField(t.printLayout.engineer, pm.engineer, wideCenter, 84, 300, 'engineer');
-
-        renderField(t.printLayout.date, pm.date, narrowCenter, 16, 140, 'date');
-        renderField(t.printLayout.rev, pm.revision, narrowCenter, 50, 140, 'revision');
-        renderField(t.printLayout.approved, pm.approvedBy, narrowCenter, 84, 140, 'approvedBy');
-    }
 
   }, [
     data,
