@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
-import { COMPONENT_CONFIG, ICON_PATHS, DEFAULT_PRINT_METADATA } from '../constants';
+import { COMPONENT_CONFIG, ICON_PATHS } from '../constants';
 
 interface DiagramProps {
   data: ElectricalNode[];
@@ -202,6 +202,48 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const { width, height } = dimensions;
 
+    // --- Annotation Layer (Drawing) ---
+    // Render existing annotations
+    const annotationGroup = svg.append('g').attr('class', 'annotations');
+    
+    // We need annotations to zoom with the graph, so we'll append them to the main 'g' later
+    // But for capturing mouse events for drawing, we need an overlay.
+    
+    if (isAnnotating) {
+        svg.style('cursor', 'crosshair');
+        
+        // Transparent overlay for capturing drawing events
+        svg.append('rect')
+           .attr('width', '100%')
+           .attr('height', '100%')
+           .attr('fill', 'transparent')
+           .on('mousedown', function(event) {
+               const coords = d3.pointer(event, g.node()); // Get coords relative to zoomable group
+               let currentPath = `M ${coords[0]} ${coords[1]}`;
+               
+               const pathEl = g.append('path') // Append to zoomable group
+                   .attr('class', 'temp-drawing')
+                   .attr('d', currentPath)
+                   .attr('stroke', annotationColor)
+                   .attr('stroke-width', 3)
+                   .attr('fill', 'none')
+                   .attr('stroke-linecap', 'round')
+                   .attr('stroke-linejoin', 'round');
+
+               d3.select(this)
+                   .on('mousemove', (e) => {
+                       const m = d3.pointer(e, g.node());
+                       currentPath += ` L ${m[0]} ${m[1]}`;
+                       pathEl.attr('d', currentPath);
+                   })
+                   .on('mouseup', () => {
+                       d3.select(this).on('mousemove', null).on('mouseup', null);
+                       if (onAnnotationAdd) onAnnotationAdd(currentPath, annotationColor);
+                       pathEl.remove(); // Remove temp, App state will re-render permanent one
+                   });
+           });
+    }
+
     if (!data || data.length === 0) {
       const g = svg
         .append('g')
@@ -220,8 +262,9 @@ export const Diagram: React.FC<DiagramProps> = ({
           onAddRoot && onAddRoot();
         });
 
+      // Simple domain icon path for empty state
       g.append('path')
-        .attr('d', ICON_PATHS['domain'])
+        .attr('d', "M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z")
         .attr('transform', 'translate(-16, -16) scale(1.33)')
         .attr('fill', secondaryTextColor)
         .style('pointer-events', 'none');
@@ -232,36 +275,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         .style('font-size', '14px')
         .style('fill', secondaryTextColor)
         .text(t.addFirstNode);
-
-      const genG = svg
-        .append('g')
-        .attr('transform', `translate(${width / 2},${height / 2 + 120})`);
-
-      genG
-        .append('rect')
-        .attr('x', -80)
-        .attr('y', -20)
-        .attr('width', 160)
-        .attr('height', 40)
-        .attr('rx', 20)
-        .attr('fill', 'transparent')
-        .attr('stroke', secondaryTextColor)
-        .attr('stroke-dasharray', '4,4')
-        .style('cursor', isCleanView ? 'default' : 'pointer')
-        .on('click', (e) => {
-          if (isCleanView) return;
-          e.stopPropagation();
-          onAddGenerator && onAddGenerator();
-        });
-
-      genG
-        .append('text')
-        .attr('text-anchor', 'middle')
-        .attr('dominant-baseline', 'central')
-        .style('font-size', '12px')
-        .style('fill', secondaryTextColor)
-        .style('pointer-events', 'none')
-        .text(t.addStandaloneGen);
 
       return;
     }
@@ -280,22 +293,11 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('orient', 'auto-start-reverse');
 
       if (type === 'arrow')
-        markerStart
-          .append('path')
-          .attr('d', 'M10,0 L0,5 L10,10 z')
-          .attr('fill', 'context-stroke');
+        markerStart.append('path').attr('d', 'M10,0 L0,5 L10,10 z').attr('fill', 'context-stroke');
       else if (type === 'circle')
-        markerStart
-          .append('circle')
-          .attr('cx', 5)
-          .attr('cy', 5)
-          .attr('r', 4)
-          .attr('fill', 'context-stroke');
+        markerStart.append('circle').attr('cx', 5).attr('cy', 5).attr('r', 4).attr('fill', 'context-stroke');
       else if (type === 'diamond')
-        markerStart
-          .append('path')
-          .attr('d', 'M5,0 L10,5 L5,10 L0,5 z')
-          .attr('fill', 'context-stroke');
+        markerStart.append('path').attr('d', 'M5,0 L10,5 L5,10 L0,5 z').attr('fill', 'context-stroke');
 
       const markerEnd = defs
         .append('marker')
@@ -308,22 +310,11 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('orient', 'auto');
 
       if (type === 'arrow')
-        markerEnd
-          .append('path')
-          .attr('d', 'M0,0 L10,5 L0,10 z')
-          .attr('fill', 'context-stroke');
+        markerEnd.append('path').attr('d', 'M0,0 L10,5 L0,10 z').attr('fill', 'context-stroke');
       else if (type === 'circle')
-        markerEnd
-          .append('circle')
-          .attr('cx', 5)
-          .attr('cy', 5)
-          .attr('r', 4)
-          .attr('fill', 'context-stroke');
+        markerEnd.append('circle').attr('cx', 5).attr('cy', 5).attr('r', 4).attr('fill', 'context-stroke');
       else if (type === 'diamond')
-        markerEnd
-          .append('path')
-          .attr('d', 'M5,0 L10,5 L5,10 L0,5 z')
-          .attr('fill', 'context-stroke');
+        markerEnd.append('path').attr('d', 'M5,0 L10,5 L5,10 L0,5 z').attr('fill', 'context-stroke');
     });
 
     defs
@@ -383,19 +374,15 @@ export const Diagram: React.FC<DiagramProps> = ({
     const getNodeSize = (d: d3.HierarchyNode<ElectricalNode>) => {
       if (d.data.id === 'virtual-root') return { w: 1, h: 1 };
 
-      // Shape override handling
       const isCircle = d.data.shape === 'circle';
       const isSquare = d.data.shape === 'square';
 
       if (isCircle || isSquare) {
-        return { w: 80, h: 80 }; // Fixed size for simple shapes
+        return { w: 80, h: 80 }; 
       }
 
       const displayName = getTranslatedName(d.data.name, d.data.type);
-      const compNum =
-        d.data.componentNumber ||
-        t.componentTypes[d.data.type] ||
-        d.data.type;
+      const compNum = d.data.componentNumber || t.componentTypes[d.data.type] || d.data.type;
       const model = d.data.model || '';
       const desc = getTranslatedDescription(d.data.description);
 
@@ -424,7 +411,8 @@ export const Diagram: React.FC<DiagramProps> = ({
         const totalW = 20 + (d.data.generatorName ? width + 6 : 0);
         badgeWidth += totalW;
       }
-      // Add extra width for new badges (fixed approximate width as they are icon based)
+      
+      // Approximate badge widths for new icons
       if (d.data.isExcludedFromMeter) badgeWidth += 24;
       if (d.data.isAirConditioning) badgeWidth += 24;
       if (d.data.isReserved) badgeWidth += 24;
@@ -442,13 +430,13 @@ export const Diagram: React.FC<DiagramProps> = ({
       );
       const nodeW = contentWidth + 30;
 
-      let contentHeight = 25;
-      contentHeight += 24;
-      contentHeight += 16;
+      let contentHeight = 25; // Icon area
+      contentHeight += 24; // Title
+      contentHeight += 16; // Type/Number
       if (specText) contentHeight += 14;
       if (model) contentHeight += 14;
       if (desc) contentHeight += 14;
-      // Adjust height if any badge is present
+      
       if (d.data.hasMeter || d.data.hasGeneratorConnection || d.data.isExcludedFromMeter || d.data.isAirConditioning || d.data.isReserved) contentHeight += 26;
       contentHeight += 12;
 
@@ -557,12 +545,26 @@ export const Diagram: React.FC<DiagramProps> = ({
       }
     });
 
+    // Render Annotations
+    if (annotations.length > 0) {
+        annotations.forEach(ant => {
+            g.append('path')
+             .attr('d', ant.path)
+             .attr('stroke', ant.color)
+             .attr('stroke-width', 3)
+             .attr('fill', 'none')
+             .attr('stroke-linecap', 'round')
+             .attr('stroke-linejoin', 'round')
+             .attr('opacity', 0.8);
+        });
+    }
+
     const linksGroup = g.append('g').attr('class', 'links');
 
     const drag = d3
       .drag<SVGGElement, ExtendedHierarchyNode>()
       .on('start', function (event, d) {
-        if (isCleanView) return; // Disable drag in Clean View
+        if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
         const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
         descendants.forEach((desc: ExtendedHierarchyNode) => {
@@ -572,7 +574,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         d3.select(this).attr('data-is-dragging', 'false');
       })
       .on('drag', function (event, d) {
-        if (isCleanView) return; // Disable drag in Clean View
+        if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
         if (!node.__isDragging && event.dx * event.dx + event.dy * event.dy > 0) {
           node.__totalDx = (node.__totalDx || 0) + event.dx;
@@ -609,7 +611,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
       })
       .on('end', function (event, d) {
-        if (isCleanView) return; // Disable drag in Clean View
+        if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
         if (node.__isDragging) {
           node.__isDragging = false;
@@ -734,7 +736,31 @@ export const Diagram: React.FC<DiagramProps> = ({
         onLinkClick(d.source.data.id, d.target.data.id);
       });
 
-    // 1. Render Nodes First (So they are behind labels)
+    // Helper to render Icons (handles both simple strings and complex array icons)
+    const renderIcon = (parent: d3.Selection<SVGGElement, unknown, null, undefined>, iconName: string, color: string, defaultTransform: string) => {
+        const iconData = ICON_PATHS[iconName] || ICON_PATHS['help'];
+        
+        if (Array.isArray(iconData)) {
+             // Complex multi-path icon (e.g., 512x512)
+             const normScale = 24 / 512;
+             
+             iconData.forEach((path: any) => {
+                 parent.append('path')
+                    .attr('d', path.d)
+                    .attr('fill', path.fill || color)
+                    // Apply defaultTransform first to position/size the container, 
+                    // then normalize 512->24, then apply icon internal transform
+                    .attr('transform', `${defaultTransform} scale(${normScale}) ${path.transform || ''}`);
+             });
+        } else {
+            // Standard single path string
+            parent.append('path')
+                .attr('d', iconData)
+                .attr('transform', defaultTransform)
+                .attr('fill', color);
+        }
+    };
+
     const nodes = g
       .selectAll<SVGGElement, ExtendedHierarchyNode>('g.node')
       .data(nodesToRender)
@@ -770,74 +796,38 @@ export const Diagram: React.FC<DiagramProps> = ({
         onNodeClick(d.data, event.shiftKey);
       })
       .on('mouseenter', function (event, d: ExtendedHierarchyNode) {
-        if (isCleanView) {
-            // Only allow interaction with collapse/expand in Clean View
-            // But if it's permanent, we don't need to change opacity here
-            // Just ensure pointer-events are all
-            const el = d3.select(this as SVGGElement);
-            el.select<SVGGElement>('.action-buttons')
-                .style('pointer-events', 'all');
-            return;
-        }
+        if (isCleanView) return;
 
-        const isSelected =
-          d.data.id === selectedNodeId || multiSelection.has(d.data.id);
+        const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
         const isSource = d.data.id === connectionSourceId;
         const el = d3.select(this as SVGGElement);
         el.style('cursor', 'move');
-        el.select<SVGGElement>('.action-buttons')
-          .style('opacity', 1)
-          .style('pointer-events', 'all');
         
-        // Hover highlight color logic
         const hoverFill = isDark ? '#334155' : '#e2e8f0';
         el.select<SVGRectElement | SVGCircleElement>('.node-bg')
           .transition()
           .duration(200)
           .attr('fill', hoverFill)
-          .attr(
-            'stroke',
-            isSource ? '#f59e0b' : isSelected ? '#3b82f6' : '#64748b'
-          );
+          .attr('stroke', isSource ? '#f59e0b' : isSelected ? '#3b82f6' : '#64748b');
       })
       .on('mouseleave', function (event, d: ExtendedHierarchyNode) {
         const el = d3.select(this as SVGGElement);
-        // Always hide action buttons on leave, unless selected (in normal mode)
-        const isSelected =
-          d.data.id === selectedNodeId || multiSelection.has(d.data.id);
+        const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
         
-        if (isCleanView) {
-             // In Clean View, keep action buttons visible (permanent)
-             return;
-        }
+        if (isCleanView) return;
         
         const isSource = d.data.id === connectionSourceId;
-
-        if (!isSelected)
-          el
-            .select<SVGGElement>('.action-buttons')
-            .style('opacity', 0)
-            .style('pointer-events', 'none');
             
-        // Revert fill color to custom or default
         el.select<SVGRectElement | SVGCircleElement>('.node-bg')
           .transition()
           .duration(200)
           .attr('fill', (d2: ExtendedHierarchyNode) =>
              d2.data.customBgColor || (d2.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor)
           )
-          .attr(
-            'stroke',
-            isSource
-              ? '#f59e0b'
-              : isSelected
-              ? '#3b82f6'
-              : secondaryTextColor
-          );
+          .attr('stroke', isSource ? '#f59e0b' : isSelected ? '#3b82f6' : secondaryTextColor);
       })
       .style('cursor', () => isCleanView ? 'default' : 'move')
       .style('filter', (d) => {
-          // Clean View Filter Highlight Logic
           if (isCleanView && activeFilters.size > 0) {
               const matches = 
                   (activeFilters.has('meter') && d.data.hasMeter) || 
@@ -852,7 +842,6 @@ export const Diagram: React.FC<DiagramProps> = ({
           return null;
       })
       .style('opacity', (d) => {
-        // Clean View Filter Dimming Logic
         if (isCleanView && activeFilters.size > 0) {
             const matches = 
                   (activeFilters.has('meter') && d.data.hasMeter) || 
@@ -866,25 +855,11 @@ export const Diagram: React.FC<DiagramProps> = ({
 
         if (!searchMatches) return 1;
         if (searchMatches.has(d.data.id)) return 1;
-        if (
-          d.parent &&
-          d.parent.data.id !== 'virtual-root' &&
-          searchMatches.has(d.parent.data.id)
-        )
-          return 1;
-        if (d.children && d.children.some((c: any) => searchMatches.has(c.data.id)))
-          return 1;
-        if (
-          (d as any)._children &&
-          (d as any)._children.some((c: any) =>
-            searchMatches.has(c.data.id)
-          )
-        )
-          return 1;
+        if (d.parent && d.parent.data.id !== 'virtual-root' && searchMatches.has(d.parent.data.id)) return 1;
+        if (d.children && d.children.some((c: any) => searchMatches.has(c.data.id))) return 1;
         return 0.2;
       });
 
-    // Node Shape Rendering Logic
     nodes.each(function (d: any) {
       const nodeG = d3.select(this as SVGGElement);
       const shape = d.data.shape || 'rectangle';
@@ -893,8 +868,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       const fill = d.data.customBgColor || (d.data.type === ComponentType.SYSTEM_ROOT ? rootNodeBgColor : nodeBgColor);
 
       if (shape === 'circle') {
-        nodeG
-          .append('circle')
+        nodeG.append('circle')
           .attr('class', 'node-bg')
           .attr('r', 40)
           .attr('cx', 0)
@@ -902,28 +876,14 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('fill', fill)
           .attr('stroke', (dAny: any) => {
             if (dAny.data.id === connectionSourceId) return '#f59e0b';
-            if (
-              dAny.data.id === selectedNodeId ||
-              multiSelection.has(dAny.data.id)
-            )
-              return '#3b82f6';
-            return dAny.data.type === ComponentType.SYSTEM_ROOT
-              ? '#64748b'
-              : secondaryTextColor;
+            if (dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id)) return '#3b82f6';
+            return dAny.data.type === ComponentType.SYSTEM_ROOT ? '#64748b' : secondaryTextColor;
           })
           .attr('stroke-width', (dAny: any) =>
-            dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id)
-              ? 3
-              : 1.5
-          )
-          .style('filter', (dAny: any) =>
-            dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id)
-              ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))'
-              : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+            dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id) ? 3 : 1.5
           );
       } else if (shape === 'square') {
-        nodeG
-          .append('rect')
+        nodeG.append('rect')
           .attr('class', 'node-bg')
           .attr('width', 80)
           .attr('height', 80)
@@ -933,22 +893,14 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('fill', fill)
           .attr('stroke', (dAny: any) => {
             if (dAny.data.id === connectionSourceId) return '#f59e0b';
-            if (
-              dAny.data.id === selectedNodeId ||
-              multiSelection.has(dAny.data.id)
-            )
-              return '#3b82f6';
+            if (dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id)) return '#3b82f6';
             return secondaryTextColor;
           })
           .attr('stroke-width', (dAny: any) =>
-            dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id)
-              ? 3
-              : 1.5
+            dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id) ? 3 : 1.5
           );
       } else {
-        // Rectangle (Default)
-        nodeG
-          .append('rect')
+        nodeG.append('rect')
           .attr('class', 'node-bg')
           .attr('width', box.w)
           .attr('height', box.h)
@@ -958,33 +910,14 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('fill', fill)
           .attr('stroke', (dAny: any) => {
             if (dAny.data.id === connectionSourceId) return '#f59e0b';
-            if (
-              dAny.data.id === selectedNodeId ||
-              multiSelection.has(dAny.data.id)
-            )
-              return '#3b82f6';
-            return dAny.data.type === ComponentType.SYSTEM_ROOT
-              ? '#64748b'
-              : secondaryTextColor;
+            if (dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id)) return '#3b82f6';
+            return dAny.data.type === ComponentType.SYSTEM_ROOT ? '#64748b' : secondaryTextColor;
           })
           .attr('stroke-width', (dAny: any) =>
-            dAny.data.id === selectedNodeId ||
-            multiSelection.has(dAny.data.id) ||
-            dAny.data.id === connectionSourceId
-              ? 3
-              : 1.5
-          )
-          .style('filter', (dAny: any) =>
-            dAny.data.id === selectedNodeId ||
-            multiSelection.has(dAny.data.id) ||
-            dAny.data.id === connectionSourceId
-              ? 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.3))'
-              : 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))'
+            dAny.data.id === selectedNodeId || multiSelection.has(dAny.data.id) || dAny.data.id === connectionSourceId ? 3 : 1.5
           );
 
-        // Color Bar for Rectangle
-        nodeG
-          .append('path')
+        nodeG.append('path')
           .attr('d', (dAny: any) => {
             const r = 12;
             const box2 = getRectBox(dAny);
@@ -993,16 +926,12 @@ export const Diagram: React.FC<DiagramProps> = ({
             } a${r},${r} 0 0 1 ${r},${r} v${6 - r}`;
           })
           .attr('fill', (dAny: ExtendedHierarchyNode) =>
-            dAny.data.customColor ||
-            COMPONENT_CONFIG[dAny.data.type]?.color ||
-            '#94a3b8'
+            dAny.data.customColor || COMPONENT_CONFIG[dAny.data.type]?.color || '#94a3b8'
           );
       }
     });
 
-    // Content Group (Icon + Text)
-    const contentG = nodes
-      .append('g')
+    const contentG = nodes.append('g')
       .attr('transform', (d) => {
         const shape = d.data.shape || 'rectangle';
         const box = getRectBox(d);
@@ -1014,16 +943,11 @@ export const Diagram: React.FC<DiagramProps> = ({
         else return `translate(0, ${box.y + 25})`;
       });
 
-    // Icon / Custom Image
     contentG.each(function (d) {
       const el = d3.select(this as SVGGElement);
-      const iconColor =
-        d.data.customColor ||
-        COMPONENT_CONFIG[d.data.type]?.color ||
-        '#94a3b8';
+      const iconColor = d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8';
 
       if (d.data.customImage) {
-        // Render Custom Image
         el.append('image')
           .attr('xlink:href', d.data.customImage)
           .attr('x', -20)
@@ -1032,7 +956,6 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('height', 40)
           .style('clip-path', 'circle(20px at center)');
       } else {
-        // Render Standard Icon
         const shape = d.data.shape || 'rectangle';
         if (shape === 'rectangle') {
           el.append('circle')
@@ -1043,17 +966,13 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('stroke', iconColor)
             .attr('stroke-width', 1.5);
         }
-        el.append('path')
-          .attr(
-            'd',
-            ICON_PATHS[COMPONENT_CONFIG[d.data.type]?.icon] || ICON_PATHS['help']
-          )
-          .attr('transform', 'translate(-9, -9) scale(0.75)')
-          .attr('fill', iconColor);
+        
+        const iconName = COMPONENT_CONFIG[d.data.type]?.icon;
+        const defaultTransform = 'translate(-9, -9) scale(0.75)';
+        renderIcon(el, iconName, iconColor, defaultTransform);
       }
     });
 
-    // Text Labels
     contentG.each(function (d) {
       const el = d3.select(this as SVGGElement);
       const shape = d.data.shape || 'rectangle';
@@ -1068,7 +987,6 @@ export const Diagram: React.FC<DiagramProps> = ({
           .style('fill', textColor)
           .text(() => getTranslatedName(d.data.name, d.data.type));
       } else {
-        // Full details for Rectangle
         el.append('text')
           .attr('x', 0)
           .attr('y', 32)
@@ -1084,20 +1002,9 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('text-anchor', 'middle')
           .style('font-size', '10px')
           .style('font-weight', 'bold')
-          .style(
-            'fill',
-            () =>
-              d.data.customColor ||
-              COMPONENT_CONFIG[d.data.type]?.color ||
-              '#94a3b8'
-          )
+          .style('fill', () => d.data.customColor || COMPONENT_CONFIG[d.data.type]?.color || '#94a3b8')
           .style('opacity', 0.9)
-          .text(
-            () =>
-              d.data.componentNumber ||
-              t.componentTypes[d.data.type] ||
-              d.data.type
-          );
+          .text(() => d.data.componentNumber || t.componentTypes[d.data.type] || d.data.type);
 
         el.append('text')
           .attr('x', 0)
@@ -1134,18 +1041,13 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('text-anchor', 'middle')
             .style('font-size', '10px')
             .style('fill', secondaryTextColor)
-            .text(
-              desc.length > 30 ? desc.substring(0, 28) + '...' : desc
-            );
+            .text(desc.length > 30 ? desc.substring(0, 28) + '...' : desc);
         }
       }
     });
 
     nodes
-      .filter(
-        (d) =>
-          !!(d.data.isCollapsed && d._children && d._children.length > 0)
-      )
+      .filter((d) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
       .append('circle')
       .attr('r', 8)
       .attr('cx', (d) => {
@@ -1168,17 +1070,14 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('stroke', secondaryTextColor)
       .attr('stroke-width', 1)
       .style('cursor', 'pointer')
-      .style('pointer-events', 'all') // Allow clicking to expand in Clean View
+      .style('pointer-events', 'all')
       .on('click', function(e, d) {
           e.stopPropagation();
           onToggleCollapse(d.data);
       });
 
     nodes
-      .filter(
-        (d) =>
-          !!(d.data.isCollapsed && d._children && d._children.length > 0)
-      )
+      .filter((d) => !!(d.data.isCollapsed && d._children && d._children.length > 0))
       .append('text')
       .attr('text-anchor', 'middle')
       .attr('dominant-baseline', 'central')
@@ -1210,21 +1109,20 @@ export const Diagram: React.FC<DiagramProps> = ({
       return box.y + box.h - 24;
     };
 
-    // Helper to render badges
     const renderBadge = (
         gNode: d3.Selection<SVGGElement, unknown, null, undefined>, 
         textValue: string, 
-        iconPath: string, 
+        iconName: string, 
         color: string, 
         bgColorLight: string, 
         bgColorDark: string, 
         d: ExtendedHierarchyNode,
-        xOffset: number
+        xOffset: number,
+        customTransform?: string
     ) => {
         const group = gNode.append('g');
         
-        const text = group
-          .append('text')
+        const text = group.append('text')
           .attr('y', 9)
           .attr('dominant-baseline', 'central')
           .style('font-size', '9px')
@@ -1238,8 +1136,7 @@ export const Diagram: React.FC<DiagramProps> = ({
 
         text.attr('x', 20);
 
-        group
-          .insert('rect', 'text')
+        group.insert('rect', 'text')
           .attr('height', 18)
           .attr('width', totalWidth)
           .attr('rx', 9)
@@ -1247,646 +1144,86 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('stroke', color)
           .attr('stroke-width', 0.5);
 
-        group
-          .append('path')
-          .attr('d', iconPath)
-          .attr('transform', 'translate(3, 3) scale(0.5)')
-          .attr('fill', color);
+        const defaultTrans = customTransform || 'translate(3, 3) scale(0.5)';
+        renderIcon(group, iconName, color, defaultTrans);
         
         if (d.data.shape && d.data.shape !== 'rectangle') {
-             // For circle/square, stack or position manually if multiple
-             // This is simplified, just placing them roughly
              group.attr('transform', `translate(${xOffset}, -35)`);
         } else {
              const box = getRectBox(d);
              const y = getBadgeBaseY(d);
-             // Position from left + offset
              group.attr('transform', `translate(${box.x + 8 + xOffset}, ${y})`);
         }
-        
         return totalWidth;
     };
-
 
     nodes.each(function(d: any) {
         const gNode = d3.select(this as SVGGElement);
         let currentXOffset = 0;
 
-        // 1. Meter Badge
         if (d.data.hasMeter) {
-            const w = renderBadge(
-                gNode, d.data.meterNumber || '', ICON_PATHS['speed'], 
-                '#3b82f6', '#dbeafe', '#1e3a8a', d, currentXOffset
-            );
+            const w = renderBadge(gNode, d.data.meterNumber || '', 'speed', '#3b82f6', '#dbeafe', '#1e3a8a', d, currentXOffset);
             currentXOffset += w + 5;
         }
-
-        // 2. Generator Badge
         if (d.data.hasGeneratorConnection) {
-            const w = renderBadge(
-                gNode, d.data.generatorName || '', ICON_PATHS['letter_g'], 
-                '#ef4444', '#fee2e2', '#7f1d1d', d, currentXOffset
-            );
+            const w = renderBadge(gNode, d.data.generatorName || '', 'letter_g', '#ef4444', '#fee2e2', '#7f1d1d', d, currentXOffset);
             currentXOffset += w + 5;
         }
-
-        // 3. No Meter Badge
         if (d.data.isExcludedFromMeter) {
-             const w = renderBadge(
-                gNode, '', ICON_PATHS['power_off'],
-                '#64748b', '#f1f5f9', '#334155', d, currentXOffset
-            );
+             const w = renderBadge(gNode, '', 'power_off', '#64748b', '#f1f5f9', '#334155', d, currentXOffset);
             currentXOffset += w + 5;
         }
-
-        // 4. A/C Badge
         if (d.data.isAirConditioning) {
-             const w = renderBadge(
-                gNode, '', ICON_PATHS['ac_unit'],
-                '#06b6d4', '#cffafe', '#155e75', d, currentXOffset
-            );
+             const w = renderBadge(gNode, '', 'ac_unit', '#06b6d4', '#cffafe', '#155e75', d, currentXOffset);
             currentXOffset += w + 5;
         }
-
-        // 5. Reserved Badge
         if (d.data.isReserved) {
-             const w = renderBadge(
-                gNode, '', ICON_PATHS['lock'],
-                '#eab308', '#fef9c3', '#713f12', d, currentXOffset
-            );
+             const w = renderBadge(gNode, '', 'lock', '#eab308', '#fef9c3', '#713f12', d, currentXOffset);
             currentXOffset += w + 5;
         }
     });
 
-
-    // Calculated Load Badge
-    nodes
-      .filter((d) => d.data.calculatedLoad && (d.data.calculatedLoad.amps > 0 || d.data.calculatedLoad.kva > 0))
-      .append('g')
-      .each(function(d: any) {
-          const gNode = d3.select(this as SVGGElement);
-          const load = d.data.calculatedLoad!;
-          const textVal = `∑ ${load.amps}A`;
-
-          const text = gNode.append('text')
-              .attr('y', -8)
-              .attr('text-anchor', 'middle')
-              .style('font-size', '10px')
-              .style('font-weight', 'bold')
-              .style('fill', '#a855f7')
-              .text(textVal);
-          
-          const textLen = text.node()?.getComputedTextLength() || 0;
-          const w = textLen + 8;
-          
-          gNode.insert('rect', 'text')
-              .attr('x', -w/2)
-              .attr('y', -18)
-              .attr('width', w)
-              .attr('height', 14)
-              .attr('rx', 4)
-              .attr('fill', isDark ? '#3b0764' : '#f3e8ff')
-              .attr('stroke', '#a855f7')
-              .attr('stroke-width', 1);
-
-          if (d.data.shape === 'circle' || d.data.shape === 'square') {
-               gNode.attr('transform', `translate(0, -45)`);
-          } else {
-              const box = getRectBox(d);
-              gNode.attr('transform', `translate(${box.x + box.w/2}, ${box.y})`);
-          }
-      });
-
-    // Action buttons (Conditional based on Clean View)
-    nodes
-      .append('g')
-      .attr('class', 'action-buttons')
-      .attr('transform', (d) => {
-        if (d.data.shape === 'circle' || d.data.shape === 'square') {
-          return `translate(50, 0)`;
-        }
-        const box = getRectBox(d);
-        return `translate(${box.x + box.w + 12}, ${box.y + box.h / 2})`;
-      })
-      .style('opacity', (d) => {
-        // In Clean View, keep action buttons (collapse icon) always visible
-        if (isCleanView) return 1;
-        return d.data.id === selectedNodeId ? 1 : 0;
-      })
-      .style('pointer-events', (d) => {
-        // In Clean View, keep action buttons clickable
-        if (isCleanView) return 'all';
-        return d.data.id === selectedNodeId ? 'all' : 'none';
-      })
-      .style('transition', 'opacity 0.2s')
-      .call((gSel) => {
-        
-        // Add Button (Hide in Clean View)
-        if (!isCleanView) {
-            gSel
-              .append('g')
-              .attr('transform', 'translate(0, -28)')
-              .style('cursor', 'pointer')
-              .on('click', (e, d) => {
-                e.stopPropagation();
-                onDuplicateChild(d.data);
-              })
-              .call((btn) => {
-                btn
-                  .append('circle')
-                  .attr('r', 10)
-                  .attr('fill', '#2563eb')
-                  .attr('stroke', '#1e40af')
-                  .attr('stroke-width', 1);
-                btn
-                  .append('path')
-                  .attr('d', ICON_PATHS['add'])
-                  .attr('transform', 'translate(-8, -8) scale(0.66)')
-                  .attr('fill', 'white');
-                btn.append('title').text(t.inputPanel.addConnection);
-              });
-        }
-
-        // Collapse/Expand Button (Show in Clean View)
-        gSel
-          .filter(
-            (d: any) =>
-              (d.children && d.children.length > 0) ||
-              (d._children && d._children.length > 0)
-          )
-          .append('g')
-          .attr('transform', 'translate(0, 0)')
-          .style('cursor', 'pointer')
-          .on('click', (e, d) => {
-            e.stopPropagation();
-            onToggleCollapse(d.data);
-          })
-          .call((btn) => {
-            btn
-              .append('circle')
-              .attr('r', 10)
-              .attr('fill', '#475569')
-              .attr('stroke', '#334155')
-              .attr('stroke-width', 1);
-            btn
-              .append('path')
-              .attr('d', (dAny: any) =>
-                ICON_PATHS[
-                  dAny.data.isCollapsed ? 'visibility_off' : 'visibility'
-                ]
-              )
-              .attr('transform', 'translate(-8, -8) scale(0.66)')
-              .attr('fill', 'white');
-            btn.append('title').text((dAny: any) =>
-              dAny.data.isCollapsed
-                ? t.inputPanel.expand
-                : t.inputPanel.collapse
-            );
-          });
-
-        // Group Button (Hide in Clean View)
-        if (!isCleanView) {
-            gSel
-              .filter((d: any) => d.depth > 1)
-              .append('g')
-              .attr('transform', 'translate(0, 28)')
-              .style('cursor', 'pointer')
-              .on('click', (e, d) => {
-                e.stopPropagation();
-                onGroupNode(d.data);
-              })
-              .call((btn) => {
-                btn
-                  .append('circle')
-                  .attr('r', 10)
-                  .attr('fill', '#eab308')
-                  .attr('stroke', '#ca8a04')
-                  .attr('stroke-width', 1);
-                btn
-                  .append('path')
-                  .attr('d', ICON_PATHS['folder_open'])
-                  .attr('transform', 'translate(-8, -8) scale(0.66)')
-                  .attr('fill', 'white');
-                btn.append('title').text(t.inputPanel.groupNode);
-              });
-
-            // Delete Button (Hide in Clean View)
-            gSel
-              .append('g')
-              .attr('transform', 'translate(0, 56)')
-              .style('cursor', 'pointer')
-              .on('click', (e, d) => {
-                e.stopPropagation();
-                onDeleteNode(d.data);
-              })
-              .call((btn) => {
-                btn
-                  .append('circle')
-                  .attr('r', 10)
-                  .attr('fill', '#ef4444')
-                  .attr('stroke', '#b91c1c')
-                  .attr('stroke-width', 1);
-                btn
-                  .append('path')
-                  .attr('d', ICON_PATHS['delete'])
-                  .attr('transform', 'translate(-8, -8) scale(0.66)')
-                  .attr('fill', 'white');
-                btn.append('title').text(t.inputPanel.deleteComponent);
-              });
-        }
-      });
-
-    // 2. Labels group
-    const labelsGroup = g.append('g').attr('class', 'labels');
-
-    // Cable size labels
-    linksToRender.forEach((link) => {
-      const targetNode = link.target;
-      const targetData = targetNode.data;
-
-      if (targetData.connectionStyle?.cableSize) {
-        const source = link.source;
-        const sData = source.data;
-        const tData = targetData;
-
-        const sXOffset = sData.manualX || 0;
-        const sYOffset = sData.manualY || 0;
-        const tXOffset = tData.manualX || 0;
-        const tYOffset = tData.manualY || 0;
-
-        let srcX: number;
-        let srcY: number;
-        let tgtX: number;
-        let tgtY: number;
-
-        if (orientation === 'horizontal') {
-          srcX = source.y + source.width + sXOffset;
-          srcY = source.x + sYOffset;
-          tgtX = targetNode.y + tXOffset;
-          tgtY = targetNode.x + tYOffset;
-        } else {
-          srcX = source.x + sXOffset;
-          srcY = source.y + source.height + sYOffset;
-          tgtX = targetNode.x + tXOffset;
-          tgtY = targetNode.y + tYOffset;
-        }
-
-        let labelX: number;
-        let labelY: number;
-        let rotation = 0;
-        let textAnchor: 'start' | 'middle' | 'end' = 'middle';
-        const offset = 25;
-
-        if (orientation === 'horizontal') {
-          labelX = tgtX - offset;
-          labelY = tgtY;
-          rotation = 0;
-          textAnchor = isRTL ? 'start' : 'end';
-        } else {
-          labelX = tgtX;
-          labelY = tgtY - offset;
-          rotation = -90;
-          textAnchor = isRTL ? 'end' : 'start';
-        }
-
-        if (!isNaN(labelX) && !isNaN(labelY)) {
-          const labelGroup = labelsGroup
-            .append('g')
-            .attr(
-              'transform',
-              `translate(${labelX}, ${labelY}) rotate(${rotation})`
-            )
-            .style('pointer-events', 'none');
-
-          const style = targetData.connectionStyle || {};
-          const linkStroke =
-            style.strokeColor ||
-            targetData.customColor ||
-            COMPONENT_CONFIG[targetData.type]?.color ||
-            linkColor;
-
-          const bgRect = labelGroup
-            .append('rect')
-            .attr('rx', 4)
-            .attr('fill', linkStroke)
-            .attr('stroke', isDark ? '#ffffff' : 'none')
-            .attr('stroke-width', 1)
-            .attr('opacity', 1);
-
-          const text = labelGroup
-            .append('text')
-            .attr('text-anchor', textAnchor)
-            .attr('dominant-baseline', 'middle')
-            .style('font-size', '10px')
-            .style('font-weight', 'bold')
-            .style('fill', '#ffffff')
-            .text(targetData.connectionStyle.cableSize);
-
-          const bbox = text.node()?.getBBox();
-          if (bbox) {
-            const padding = 3;
-            bgRect
-              .attr('x', bbox.x - padding)
-              .attr('y', bbox.y - padding)
-              .attr('width', bbox.width + padding * 2)
-              .attr('height', bbox.height + padding * 2);
-          }
-        }
-      }
-    });
-
-    // 3. Annotations Layer (Always on top)
-    const annotationGroup = g.append('g').attr('class', 'annotations-layer');
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
     
-    // Render existing annotations
-    if (annotations) {
-        annotations.forEach(a => {
-            annotationGroup.append('path')
-                .attr('d', a.path)
-                .attr('stroke', a.color)
-                .attr('stroke-width', 3)
-                .attr('fill', 'none')
-                .attr('stroke-linecap', 'round')
-                .attr('stroke-linejoin', 'round')
-                .attr('opacity', 0.8);
+    if (nodesToRender.length > 0) {
+        nodesToRender.forEach(d => {
+            const w = d.width;
+            const h = d.height;
+            const offX = d.data.manualX || 0;
+            const offY = d.data.manualY || 0;
+            
+            let x1, x2, y1, y2;
+            
+            if (orientation === 'horizontal') {
+                const cx = d.y + offX;
+                const cy = d.x + offY;
+                x1 = cx;
+                x2 = cx + w;
+                y1 = cy - h / 2;
+                y2 = cy + h / 2;
+            } else {
+                const cx = d.x + offX;
+                const cy = d.y + offY;
+                x1 = cx - w / 2;
+                x2 = cx + w / 2;
+                y1 = cy;
+                y2 = cy + h;
+            }
+            if (x1 < minX) minX = x1;
+            if (x2 > maxX) maxX = x2;
+            if (y1 < minY) minY = y1;
+            if (y2 > maxY) maxY = y2;
         });
+    } else {
+        minX = 0;
+        maxX = width;
+        minY = 0;
+        maxY = height;
     }
-
-    // Annotation Interaction
-    if (isAnnotating && isCleanView) {
-        // Overlay for capturing draw events
-        const overlay = g.append('rect')
-           .attr('width', '40000') // Huge rect to cover everything
-           .attr('height', '40000')
-           .attr('x', -20000)
-           .attr('y', -20000)
-           .attr('fill', 'transparent')
-           .style('cursor', 'crosshair');
-
-        let currentPathString = "";
-        let currentPathElement: SVGPathElement | null = null;
-
-        const drawDrag = d3.drag<SVGRectElement, unknown>()
-            .container(function() { return this; })
-            .on('start', (event) => {
-                 currentPathString = `M ${event.x} ${event.y}`;
-                 // Render temporary path
-                 currentPathElement = annotationGroup.append('path')
-                    .attr('d', currentPathString)
-                    .attr('stroke', annotationColor || 'red')
-                    .attr('stroke-width', 3)
-                    .attr('fill', 'none')
-                    .attr('stroke-linecap', 'round')
-                    .attr('stroke-linejoin', 'round')
-                    .node();
-            })
-            .on('drag', (event) => {
-                 if (currentPathElement) {
-                     currentPathString += ` L ${event.x} ${event.y}`;
-                     d3.select(currentPathElement).attr('d', currentPathString);
-                 }
-            })
-            .on('end', () => {
-                 if (currentPathString && onAnnotationAdd) {
-                     // Pass back to React state, which triggers re-render
-                     // This will clear the temp path but the new state will render it via the 'annotations' loop above
-                     onAnnotationAdd(currentPathString, annotationColor || 'red');
-                 }
-                 currentPathElement = null;
-                 currentPathString = "";
-            });
-
-        overlay.call(drawDrag);
-    }
-
-
-    // Dynamic content bounds
-    let maxY = 600;
-    let maxX = 800;
-    let minX = 0;
-    let minY = 0;
-
-    nodesToRender.forEach((d) => {
-      const box = getRectBox(d);
-      const offsetX = d.data.manualX || 0;
-      const offsetY = d.data.manualY || 0;
-      let absoluteX: number;
-      let absoluteY: number;
-      if (orientation === 'horizontal') {
-        absoluteX = d.y + offsetX;
-        absoluteY = d.x + offsetY;
-      } else {
-        absoluteX = d.x + offsetX;
-        absoluteY = d.y + offsetY;
-      }
-      const left = absoluteX + box.x;
-      const right = absoluteX + box.x + box.w;
-      const top = absoluteY + box.y;
-      const bottom = absoluteY + box.y + box.h;
-      maxX = Math.max(maxX, right);
-      maxY = Math.max(maxY, bottom);
-      minX = Math.min(minX, left);
-      minY = Math.min(minY, top);
-    });
-
-    maxX = Math.max(maxX, 800);
-    maxY = Math.max(maxY, 600);
-
-    // Print layout title block
-    if (isPrintMode && activeProject) {
-      const metadata = activeProject.printMetadata || DEFAULT_PRINT_METADATA;
-      const blockW = 500;
-      const blockH = 100;
-      const xStart = maxX + 40;
-      const yStart = maxY + 40 - blockH;
-
-      const titleBlock = g
-        .append('g')
-        .attr('transform', `translate(${xStart}, ${yStart})`)
-        .style('cursor', 'pointer');
-
-      titleBlock
-        .append('rect')
-        .attr('width', blockW)
-        .attr('height', blockH)
-        .attr('fill', isDark ? '#1e293b' : '#ffffff')
-        .attr('fill-opacity', 0.8)
-        .attr('stroke', textColor)
-        .attr('stroke-width', 2)
-        .style('pointer-events', isCleanView ? 'none' : 'all') // Disable interactions in clean view
-        .on('click', function (e) {
-          if (isCleanView) return;
-          if ((e as any).defaultPrevented) return;
-          e.stopPropagation();
-          if (onEditPrintSettings) onEditPrintSettings();
-        });
-
-      const dividerX = isRTL ? blockW * 0.35 : blockW * 0.65;
-      const rowH = blockH / 3;
-
-      titleBlock
-        .append('line')
-        .attr('x1', dividerX)
-        .attr('y1', 0)
-        .attr('x2', dividerX)
-        .attr('y2', blockH)
-        .attr('stroke', textColor)
-        .attr('stroke-width', 1)
-        .style('pointer-events', 'none');
-
-      titleBlock
-        .append('line')
-        .attr('x1', 0)
-        .attr('y1', rowH)
-        .attr('x2', blockW)
-        .attr('y2', rowH)
-        .attr('stroke', textColor)
-        .attr('stroke-width', 1)
-        .style('pointer-events', 'none');
-
-      titleBlock
-        .append('line')
-        .attr('x1', 0)
-        .attr('y1', rowH * 2)
-        .attr('x2', blockW)
-        .attr('y2', rowH * 2)
-        .attr('stroke', textColor)
-        .attr('stroke-width', 1)
-        .style('pointer-events', 'none');
-
-      let wideColX: number;
-      let narrowColX: number;
-
-      if (isRTL) {
-        narrowColX = dividerX / 2;
-        wideColX = dividerX + (blockW - dividerX) / 2;
-      } else {
-        wideColX = dividerX / 2;
-        narrowColX = dividerX + (blockW - dividerX) / 2;
-      }
-
-      const renderCell = (
-        label: string,
-        value: string,
-        cx: number,
-        cy: number,
-        fieldKey: string
-      ) => {
-        const isWideField =
-          fieldKey === 'projectName' ||
-          fieldKey === 'organization' ||
-          fieldKey === 'engineer';
-
-        const cellW = isWideField
-          ? isRTL
-            ? blockW - dividerX
-            : dividerX
-          : isRTL
-          ? dividerX
-          : blockW - dividerX;
-
-        let rx = 0;
-        if (isRTL) {
-          rx = isWideField ? dividerX : 0;
-        } else {
-          rx = isWideField ? 0 : dividerX;
-        }
-
-        titleBlock
-          .append('rect')
-          .attr('x', rx)
-          .attr('y', cy - 10)
-          .attr('width', cellW)
-          .attr('height', rowH)
-          .attr('fill', 'white')
-          .attr('fill-opacity', 0.01)
-          .style('cursor', 'pointer')
-          .style('pointer-events', isCleanView ? 'none' : 'all') // Disable interactions in clean view
-          .on('click', (e) => {
-            if (isCleanView) return;
-            if ((e as any).defaultPrevented) return;
-            e.stopPropagation();
-            if (onEditPrintSettings) onEditPrintSettings(fieldKey);
-          })
-          .append('title')
-          .text(`Edit ${label}`);
-
-        titleBlock
-          .append('text')
-          .attr('x', cx)
-          .attr('y', cy)
-          .text(label)
-          .attr('fill', textColor)
-          .attr('font-size', '9px')
-          .attr('font-weight', 'bold')
-          .attr('text-anchor', 'middle')
-          .style('opacity', 0.7)
-          .style('pointer-events', 'none');
-
-        titleBlock
-          .append('text')
-          .attr('x', cx)
-          .attr('y', cy + 14)
-          .text(value)
-          .attr('fill', textColor)
-          .attr('font-size', '13px')
-          .attr('text-anchor', 'middle')
-          .style('pointer-events', 'none');
-      };
-
-      const yOffset = 10;
-
-      renderCell(t.printLayout.project, activeProject.name, wideColX, yOffset, 'projectName');
-      renderCell(t.printLayout.date, metadata.date, narrowColX, yOffset, 'date');
-
-      renderCell(
-        t.printLayout.org,
-        metadata.organization,
-        wideColX,
-        rowH + yOffset,
-        'organization'
-      );
-      renderCell(
-        t.printLayout.rev,
-        metadata.revision,
-        narrowColX,
-        rowH + yOffset,
-        'revision'
-      );
-
-      renderCell(
-        t.printLayout.engineer,
-        metadata.engineer,
-        wideColX,
-        rowH * 2 + yOffset,
-        'engineer'
-      );
-      renderCell(
-        t.printLayout.approved,
-        metadata.approvedBy,
-        narrowColX,
-        rowH * 2 + yOffset,
-        'approvedBy'
-      );
-
-      if (!isCleanView) {
-        titleBlock
-            .on('mouseenter', function () {
-            d3.select(this as SVGGElement)
-                .select('rect')
-                .attr('stroke', '#3b82f6')
-                .attr('stroke-width', 3);
-            })
-            .on('mouseleave', function () {
-            d3.select(this as SVGGElement)
-                .select('rect')
-                .attr('stroke', textColor)
-                .attr('stroke-width', 2);
-            });
-      }
-    }
-
-    // Legend
+    
     const types = Object.values(ComponentType);
     const badgeItems = [
       { label: t.legend.meter, icon: 'speed', color: '#3b82f6' },
@@ -1896,7 +1233,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       { label: t.legend.reserved, icon: 'lock', color: '#eab308' }
     ];
 
-    const totalLegendItems = types.length + badgeItems.length + 1; // +1 for spacing/separator
+    const totalLegendItems = types.length + badgeItems.length + 1; 
     const legendW = 200;
     const legendH = 50 + totalLegendItems * 25;
 
@@ -1920,8 +1257,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('class', 'legend-group')
       .attr('transform', `translate(${legX}, ${legY})`);
 
-    legendG
-      .append('rect')
+    legendG.append('rect')
       .attr('width', legendW)
       .attr('height', legendH)
       .attr('rx', 8)
@@ -1930,8 +1266,7 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('stroke-width', 1)
       .attr('opacity', 0.95);
 
-    legendG
-      .append('text')
+    legendG.append('text')
       .attr('x', legendW / 2)
       .attr('y', 25)
       .attr('text-anchor', 'middle')
@@ -1940,7 +1275,6 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('font-size', '12px')
       .text(t.legend.title);
 
-    // Render Components
     types.forEach((type, i) => {
       const y = 50 + i * 25;
       const config = COMPONENT_CONFIG[type];
@@ -1959,8 +1293,7 @@ export const Diagram: React.FC<DiagramProps> = ({
         textAnchor = 'start';
       }
 
-      legendG
-        .append('circle')
+      legendG.append('circle')
         .attr('cx', iconX)
         .attr('cy', y)
         .attr('r', 8)
@@ -1968,14 +1301,10 @@ export const Diagram: React.FC<DiagramProps> = ({
         .attr('stroke', config.color)
         .attr('stroke-width', 1.5);
 
-      legendG
-        .append('path')
-        .attr('d', ICON_PATHS[config.icon])
-        .attr('transform', `translate(${iconX - 6}, ${y - 6}) scale(0.5)`)
-        .attr('fill', config.color);
+      const itemG = legendG.append('g').attr('transform', `translate(${iconX - 6}, ${y - 6})`);
+      renderIcon(itemG, config.icon, config.color, 'scale(0.5)');
 
-      legendG
-        .append('text')
+      legendG.append('text')
         .attr('x', textX)
         .attr('y', y)
         .attr('dominant-baseline', 'middle')
@@ -1985,7 +1314,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         .text(t.componentTypes[type]);
     });
 
-    // Separator line
     const sepY = 50 + types.length * 25 + 10;
     legendG.append('line')
        .attr('x1', 20)
@@ -1996,7 +1324,6 @@ export const Diagram: React.FC<DiagramProps> = ({
        .attr('stroke-width', 1)
        .attr('opacity', 0.5);
 
-    // Render Status Badges
     badgeItems.forEach((item, i) => {
         const y = sepY + 20 + i * 25;
         let iconX: number;
@@ -2013,7 +1340,6 @@ export const Diagram: React.FC<DiagramProps> = ({
             textAnchor = 'start';
         }
 
-        // Mimic badge style
         legendG.append('rect')
             .attr('x', iconX - 10)
             .attr('y', y - 9)
@@ -2024,13 +1350,10 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('stroke', item.color)
             .attr('stroke-width', 0.5);
 
-        legendG.append('path')
-            .attr('d', ICON_PATHS[item.icon])
-            .attr('transform', `translate(${iconX - 6}, ${y - 6}) scale(0.5)`)
-            .attr('fill', item.color);
+        const itemG = legendG.append('g').attr('transform', `translate(${iconX - 6}, ${y - 6})`);
+        renderIcon(itemG, item.icon, item.color, 'scale(0.5)');
 
-        legendG
-            .append('text')
+        legendG.append('text')
             .attr('x', textX)
             .attr('y', y)
             .attr('dominant-baseline', 'middle')
@@ -2039,6 +1362,94 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('text-anchor', textAnchor)
             .text(item.label);
     });
+
+    // Print Title Block
+    if (isPrintMode && activeProject && activeProject.printMetadata) {
+        const blockW = 500;
+        const blockH = 100;
+        
+        const xStart = maxX + 40;
+        const yStart = maxY + 40;
+
+        const titleBlockG = g.append('g')
+            .attr('transform', `translate(${xStart}, ${yStart})`)
+            .attr('class', 'print-title-block')
+            .style('cursor', 'pointer');
+
+        // Background rect to capture clicks
+        titleBlockG.append('rect')
+            .attr('width', blockW)
+            .attr('height', blockH)
+            .attr('fill', 'white')
+            .attr('stroke', 'black')
+            .attr('stroke-width', 2)
+            .style('pointer-events', 'all')
+            .on('click', (event) => {
+                if(event.defaultPrevented) return;
+                event.stopPropagation();
+                if(onEditPrintSettings) onEditPrintSettings();
+            });
+
+        // Horizontal dividers
+        titleBlockG.append('line').attr('x1', 0).attr('y1', 33).attr('x2', blockW).attr('y2', 33).attr('stroke', 'black').attr('stroke-width', 1);
+        titleBlockG.append('line').attr('x1', 0).attr('y1', 66).attr('x2', blockW).attr('y2', 66).attr('stroke', 'black').attr('stroke-width', 1);
+
+        // Vertical divider
+        const dividerX = isRTL ? 150 : 350;
+        titleBlockG.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', 100).attr('stroke', 'black').attr('stroke-width', 1);
+
+        const pm = activeProject.printMetadata;
+
+        const renderField = (label: string, value: string, x: number, y: number, w: number, fieldKey: string) => {
+            const cell = titleBlockG.append('g').on('click', (e) => {
+                if(e.defaultPrevented) return;
+                e.stopPropagation();
+                if(onEditPrintSettings) onEditPrintSettings(fieldKey);
+            });
+            
+            // Invisible rect for click target
+            cell.append('rect')
+                .attr('x', x - w/2)
+                .attr('y', y - 15)
+                .attr('width', w)
+                .attr('height', 30)
+                .attr('fill', 'transparent')
+                .style('pointer-events', 'all');
+
+            cell.append('text')
+                .attr('x', x)
+                .attr('y', y - 8)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '8px')
+                .style('fill', '#666')
+                .style('pointer-events', 'none')
+                .text(label);
+            
+            cell.append('text')
+                .attr('x', x)
+                .attr('y', y + 8)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '12px')
+                .style('font-weight', 'bold')
+                .style('fill', 'black')
+                .style('pointer-events', 'none')
+                .text(value || '-');
+        };
+
+        // Coordinates based on RTL/LTR layout
+        // Wide column center:
+        const wideCenter = isRTL ? (150 + blockW) / 2 : 350 / 2;
+        // Narrow column center:
+        const narrowCenter = isRTL ? 150 / 2 : (350 + blockW) / 2;
+
+        renderField(t.printLayout.project, activeProject.name, wideCenter, 16, 300, 'projectName');
+        renderField(t.printLayout.org, pm.organization, wideCenter, 50, 300, 'organization');
+        renderField(t.printLayout.engineer, pm.engineer, wideCenter, 84, 300, 'engineer');
+
+        renderField(t.printLayout.date, pm.date, narrowCenter, 16, 140, 'date');
+        renderField(t.printLayout.rev, pm.revision, narrowCenter, 50, 140, 'revision');
+        renderField(t.printLayout.approved, pm.approvedBy, narrowCenter, 84, 140, 'approvedBy');
+    }
 
   }, [
     data,

@@ -88,7 +88,7 @@ const cloneNodeTree = (node: ElectricalNode): ElectricalNode => {
         ...node,
         id: newId,
         children: node.children.map(child => cloneNodeTree(child)),
-        extraConnections: [] // Clear external connections for clean copy
+        extraConnections: [] 
     };
 };
 
@@ -140,10 +140,8 @@ export default function App() {
   const [printSettingsFocus, setPrintSettingsFocus] = useState<string | undefined>(undefined);
   const [isCleanView, setIsCleanView] = useState(false);
   
-  // Clean View Filters (Multi-select)
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   
-  // Annotation State
   const [annotations, setAnnotations] = useState<{id: string, path: string, color: string}[]>([]);
   const [isAnnotating, setIsAnnotating] = useState(false);
   const [annotationColor, setAnnotationColor] = useState('#ef4444');
@@ -276,11 +274,9 @@ export default function App() {
 
   const handleCopy = useCallback(() => {
       if (selectedNode) {
-          // IMPORTANT: Lookup node in the live state tree to avoid circular references from D3
           const freshNode = findNode(activePage.items, selectedNode.id);
           if (freshNode) {
               try {
-                  // JSON parse/stringify to ensure no non-serializable properties (like D3 refs) are copied
                   const copy = JSON.parse(JSON.stringify(freshNode));
                   setClipboard(copy);
               } catch (e: any) {
@@ -295,18 +291,15 @@ export default function App() {
       saveToHistory();
       
       const nodeToClone = clipboard as ElectricalNode;
-      // Recursive clone to generate fresh IDs and strip extra connections
       const newNode = cloneNodeTree(nodeToClone);
       newNode.name = `${newNode.name} (Copy)`;
 
       updatePage((page) => {
           if (selectedNode) {
               const parentNode = selectedNode as ElectricalNode;
-              // Paste as child of selected node
               const items = page.items.map(root => addNodeToTree(root, parentNode.id, newNode));
               return { ...page, items };
           } else {
-              // Paste as independent node
               return { ...page, items: [...page.items, newNode] };
           }
       });
@@ -317,10 +310,7 @@ export default function App() {
       saveToHistory();
 
       updatePage((page) => {
-          // 1. Filter root nodes
           let newItems = page.items.filter(item => !idsToDelete.has(item.id));
-
-          // 2. Recursive filter for children
           const filterChildren = (node: ElectricalNode): ElectricalNode => ({
               ...node,
               children: node.children
@@ -328,15 +318,12 @@ export default function App() {
                   .map(filterChildren)
           });
           newItems = newItems.map(filterChildren);
-
-          // 3. Clean connections
           const cleanConnections = (node: ElectricalNode): ElectricalNode => ({
               ...node,
               extraConnections: node.extraConnections?.filter(id => !idsToDelete.has(id)),
               children: node.children.map(cleanConnections)
           });
           newItems = newItems.map(cleanConnections);
-
           return { ...page, items: newItems };
       });
 
@@ -380,7 +367,6 @@ export default function App() {
       saveToHistory();
       
       updatePage((page) => {
-          // 1. Check if it is an EXTRA connection
           const child = findNode(page.items, childId);
           if (child && child.extraConnections?.includes(parentId)) {
               const removeExtra = (n: ElectricalNode): ElectricalNode => {
@@ -392,11 +378,9 @@ export default function App() {
               return { ...page, items: page.items.map(removeExtra) };
           }
 
-          // 2. If not extra, it's a PRIMARY parent-child relationship
           const freshChild = findNode(page.items, childId);
           if (!freshChild) return page;
 
-          // Remove from current location in tree
           const newItemsWithRemoval = page.items.map(root => {
              const remove = (n: ElectricalNode): ElectricalNode => {
                  if (n.id === parentId) {
@@ -407,7 +391,6 @@ export default function App() {
              return remove(root);
           });
 
-          // Add as new root (independent)
           return { ...page, items: [...newItemsWithRemoval, freshChild] };
       });
 
@@ -420,7 +403,7 @@ export default function App() {
       const targetNode = findNode(activePage.items, targetId);
       if (targetNode) {
           setSelectedNode(targetNode);
-          setSelectedLinkParentId(sourceId); // Track source for disconnection
+          setSelectedLinkParentId(sourceId); 
           setSelectionMode('link');
           setMultiSelection(new Set());
       }
@@ -505,7 +488,6 @@ export default function App() {
   }, [activePageId, activeProjectId]);
 
   useEffect(() => {
-      // Reset filter when exiting clean view
       if (!isCleanView) {
           setActiveFilters(new Set());
           setIsAnnotating(false);
@@ -589,7 +571,7 @@ export default function App() {
   };
 
   const handleNodeClick = (node: ElectricalNode, isShiftKey: boolean) => {
-    if (isCleanView) return; // Disable selection in Clean View
+    if (isCleanView) return;
 
     if (isConnectMode) {
         if (!connectionSource) {
@@ -821,7 +803,6 @@ export default function App() {
 
   const handleNodeMove = (updates: {id: string, x: number, y: number}[]) => {
       const updateMap = new Map(updates.map(u => [u.id, u]));
-      
       updatePage((page) => {
           const updateTree = (node: ElectricalNode): ElectricalNode => {
               const update = updateMap.get(node.id);
@@ -876,7 +857,6 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
-        // Ensure message is a string to avoid type errors
         const diagNotFound: any = t.dialogs?.diagramNotFound;
         const notFoundVal: string = typeof diagNotFound === 'string' ? diagNotFound : "Diagram not found.";
         alert(notFoundVal);
@@ -902,8 +882,6 @@ export default function App() {
       const clone = svgElement.cloneNode(true) as SVGSVGElement;
       const buttons = clone.querySelectorAll('circle[stroke-dasharray], rect[stroke-dasharray]');
       buttons.forEach(b => b.parentElement?.remove());
-      
-      // Remove edit buttons from the clone before exporting
       const editButtons = clone.querySelectorAll('.print-layout-edit-btn');
       editButtons.forEach(b => b.remove());
 
