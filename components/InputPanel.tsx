@@ -1,7 +1,5 @@
 
 
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ComponentType, NewNodeData, ElectricalNode, ConnectionStyle, NodeShape } from '../types';
 import { COMMON_MODELS, COMPONENT_CONFIG, DEFAULT_CONNECTION_STYLE } from '../constants';
@@ -52,6 +50,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     voltage: undefined,
     kva: undefined,
     description: '',
+    place: '',
+    building: '',
+    floor: '',
     customColor: undefined,
     customBgColor: undefined,
     shape: 'rectangle',
@@ -79,6 +80,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             voltage: selectedNode.voltage,
             kva: selectedNode.kva,
             description: selectedNode.description || '',
+            place: selectedNode.place || '',
+            building: selectedNode.building || '',
+            floor: selectedNode.floor || '',
             customColor: selectedNode.customColor,
             customBgColor: selectedNode.customBgColor,
             shape: selectedNode.shape || 'rectangle',
@@ -101,6 +105,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             voltage: undefined,
             kva: undefined,
             description: '',
+            place: '',
+            building: '',
+            floor: '',
             customColor: undefined,
             customBgColor: undefined,
             shape: 'rectangle',
@@ -185,6 +192,9 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             voltage: undefined,
             kva: undefined,
             description: '',
+            place: '',
+            building: '',
+            floor: '',
             customColor: undefined,
             customBgColor: undefined,
             shape: 'rectangle',
@@ -273,6 +283,43 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                         <option value="circle">{t.inputPanel.shapes.circle}</option>
                         <option value="square">{t.inputPanel.shapes.square}</option>
                     </select>
+                </div>
+
+                {/* Location Fields for Bulk Edit */}
+                <div className="bg-slate-900/50 p-3 rounded border border-slate-700/50 space-y-3 mt-4">
+                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.inputPanel.location}</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.building}</label>
+                            <input
+                                type="text"
+                                name="building"
+                                value={formData.building}
+                                onChange={handleChange}
+                                className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.floor}</label>
+                            <input
+                                type="text"
+                                name="floor"
+                                value={formData.floor}
+                                onChange={handleChange}
+                                className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.place}</label>
+                        <input
+                            type="text"
+                            name="place"
+                            value={formData.place}
+                            onChange={handleChange}
+                            className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                        />
+                    </div>
                 </div>
                 
                 <div className="pt-2">
@@ -363,7 +410,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                             className="h-8 w-12 bg-transparent border border-slate-700 rounded cursor-pointer"
                         />
                         <input 
-                            type="text"
+                            type="text" 
                             name="strokeColor"
                             value={connectionData.strokeColor}
                             onChange={handleConnectionChange}
@@ -766,6 +813,43 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 />
             </div>
         )}
+
+        {/* Location Info Section */}
+        <div className="bg-slate-900/50 p-3 rounded border border-slate-700/50 space-y-3">
+            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.inputPanel.location}</h4>
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.building}</label>
+                    <input
+                        type="text"
+                        name="building"
+                        value={formData.building}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    />
+                </div>
+                <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.floor}</label>
+                    <input
+                        type="text"
+                        name="floor"
+                        value={formData.floor}
+                        onChange={handleChange}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    />
+                </div>
+            </div>
+            <div>
+                <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.place}</label>
+                <input
+                    type="text"
+                    name="place"
+                    value={formData.place}
+                    onChange={handleChange}
+                    className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                />
+            </div>
+        </div>
 
         <div>
             <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.description}</label>

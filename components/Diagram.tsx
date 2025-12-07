@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
@@ -427,6 +429,10 @@ export const Diagram: React.FC<DiagramProps> = ({
       if (model) contentHeight += 14;
       if (desc) contentHeight += (14 * descLines); 
       
+      if (d.data.place || d.data.building || d.data.floor) {
+          contentHeight += 14;
+      }
+
       if (d.data.hasMeter || d.data.hasGeneratorConnection || d.data.isExcludedFromMeter || d.data.isAirConditioning || d.data.isReserved) contentHeight += 26;
       contentHeight += 12;
 
@@ -1122,6 +1128,25 @@ export const Diagram: React.FC<DiagramProps> = ({
                   .attr('dy', i === 0 ? 0 : '1.2em')
                   .text(line);
           });
+          yOffset += (lines.length - 1) * 12; // Adjust for multiline
+        }
+
+        // Location Info Rendering
+        if (d.data.place || d.data.building || d.data.floor) {
+             yOffset += 14;
+             const locText = [];
+             if (d.data.building) locText.push(d.data.building);
+             if (d.data.floor) locText.push(d.data.floor);
+             if (d.data.place) locText.push(d.data.place);
+
+             el.append('text')
+                .attr('x', 0)
+                .attr('y', yOffset)
+                .attr('text-anchor', 'middle')
+                .style('font-size', '9px')
+                .style('font-weight', '500')
+                .style('fill', isDark ? '#94a3b8' : '#64748b')
+                .text(locText.join(', '));
         }
       }
     });

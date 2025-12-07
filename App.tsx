@@ -1,3 +1,5 @@
+
+
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
@@ -662,7 +664,10 @@ export default function App() {
         isCollapsed: false,
         connectionStyle: DEFAULT_CONNECTION_STYLE,
         manualX: 0,
-        manualY: 0
+        manualY: 0,
+        place: '',
+        building: '',
+        floor: ''
       };
       updatePage((page) => ({
           ...page,
@@ -692,6 +697,9 @@ export default function App() {
             voltage: data.voltage,
             kva: data.kva,
             description: data.description,
+            place: data.place,
+            building: data.building,
+            floor: data.floor,
             customColor: data.customColor,
             customBgColor: data.customBgColor,
             hasMeter: data.hasMeter,
@@ -761,6 +769,9 @@ export default function App() {
             voltage: data.voltage,
             kva: data.kva,
             description: data.description,
+            place: data.place,
+            building: data.building,
+            floor: data.floor,
             customColor: data.customColor,
             customBgColor: data.customBgColor,
             hasMeter: data.hasMeter,
@@ -842,7 +853,10 @@ export default function App() {
               children: [nodeToGroup],
               extraConnections: [],
               connectionStyle: nodeToGroup.connectionStyle,
-              isCollapsed: false
+              isCollapsed: false,
+              place: nodeToGroup.place,
+              building: nodeToGroup.building,
+              floor: nodeToGroup.floor
           };
           const replaceNodeInTree = (current: ElectricalNode, targetId: string, replacement: ElectricalNode): ElectricalNode => {
             if (current.children.some(c => c.id === targetId)) {
@@ -940,7 +954,7 @@ export default function App() {
       }
       if (format === 'excel') {
           const rows: any[] = [];
-          const columns = ['name', 'type', 'componentNum', 'model', 'amps', 'voltage', 'kva', 'parent', 'description', 'hasMeter', 'meterNum'];
+          const columns = ['name', 'type', 'componentNum', 'model', 'amps', 'voltage', 'kva', 'parent', 'description', 'hasMeter', 'meterNum', 'place', 'building', 'floor'];
           const traverse = (node: ElectricalNode, parentName: string) => {
               const row: any = {};
               row[t.csvHeaders.name] = node.name;
@@ -954,6 +968,9 @@ export default function App() {
               row[t.csvHeaders.description] = node.description || '';
               row[t.csvHeaders.hasMeter] = node.hasMeter ? t.csvHeaders.yes : t.csvHeaders.no;
               row[t.csvHeaders.meterNum] = node.meterNumber || '';
+              row[t.csvHeaders.place] = node.place || '';
+              row[t.csvHeaders.building] = node.building || '';
+              row[t.csvHeaders.floor] = node.floor || '';
               rows.push(row);
               node.children.forEach(child => traverse(child, node.name));
           };
@@ -963,7 +980,8 @@ export default function App() {
                   'name': t.csvHeaders.name, 'type': t.csvHeaders.type, 'componentNum': t.csvHeaders.componentNum,
                   'model': t.csvHeaders.model, 'amps': t.csvHeaders.amps, 'voltage': t.csvHeaders.voltage,
                   'kva': t.csvHeaders.kva, 'parent': t.csvHeaders.parent, 'description': t.csvHeaders.description,
-                  'hasMeter': t.csvHeaders.hasMeter, 'meterNum': t.csvHeaders.meterNum
+                  'hasMeter': t.csvHeaders.hasMeter, 'meterNum': t.csvHeaders.meterNum,
+                  'place': t.csvHeaders.place, 'building': t.csvHeaders.building, 'floor': t.csvHeaders.floor
               };
               const headers = columns.map(k => headerMap[k]);
               const csvContent = [
@@ -1216,6 +1234,10 @@ export default function App() {
         (node.model && node.model.toLowerCase().includes(term)) ||
         (node.componentNumber && node.componentNumber.toLowerCase().includes(term)) ||
         (node.meterNumber && node.meterNumber.toLowerCase().includes(term)) ||
+        (node.place && node.place.toLowerCase().includes(term)) ||
+        (node.building && node.building.toLowerCase().includes(term)) ||
+        (node.floor && node.floor.toLowerCase().includes(term)) ||
+        (node.description && node.description.toLowerCase().includes(term)) ||
         node.type.toLowerCase().includes(term)
       ) {
         matches.add(node.id);

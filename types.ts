@@ -33,6 +33,11 @@ export interface ElectricalNode {
   kva?: number; // Kilovolt-Amperes
   description?: string;
   
+  // Location Info
+  place?: string;
+  building?: string;
+  floor?: string;
+
   // Appearance
   customColor?: string; // Stroke/Icon Color
   customBgColor?: string; // Background Fill Color
@@ -77,6 +82,12 @@ export interface NewNodeData {
   voltage?: number;
   kva?: number;
   description?: string;
+  
+  // Location Info
+  place?: string;
+  building?: string;
+  floor?: string;
+
   customColor?: string;
   customBgColor?: string;
   shape?: NodeShape;

@@ -31,12 +31,13 @@ const analysisSchema: Schema = {
 };
 
 export const analyzeCircuit = async (nodes: ElectricalNode[]): Promise<AnalysisResult> => {
-  if (!process.env.API_KEY) {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
     throw new Error("API Key is missing");
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
 
     const prompt = `
       Analyze the following electrical single-line diagram structure (represented as a list of component trees) for an industrial or commercial setup.
@@ -64,7 +65,7 @@ export const analyzeCircuit = async (nodes: ElectricalNode[]): Promise<AnalysisR
     });
 
     const text = response.text;
-    if (text) {
+    if (typeof text === 'string') {
       return JSON.parse(text) as AnalysisResult;
     }
     
