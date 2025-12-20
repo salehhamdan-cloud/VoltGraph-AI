@@ -116,6 +116,7 @@ export const translations = {
       linkStyle: "Connection Style",
       strokeColor: "Line Color",
       lineStyle: "Line Pattern",
+      lineType: "Link Route",
       startMarker: "Start Marker",
       endMarker: "End Marker",
       cableSize: "Cable Size (e.g. 4x25mm)",
@@ -125,6 +126,10 @@ export const translations = {
           dotted: "Dotted",
           dashDot: "Dash-Dot",
           longDash: "Long Dash"
+      },
+      routeTypes: {
+          straight: "Straight",
+          orthogonal: "Orthogonal (90°)"
       },
       markers: { none: "None", arrow: "Arrow", circle: "Circle", diamond: "Diamond" },
       shapes: { rectangle: "Rectangle", circle: "Circle", square: "Square" },
@@ -241,7 +246,7 @@ export const translations = {
     projects: "פרויקטים",
     pages: "עמודים",
     addPage: "הוסף עמוד",
-    importProject: "ייבא / שחזר",
+    importProject: "ייבא / שحזר",
     backupAll: "גבה את כל הפרויקטים",
     backupProject: "שמור קובץ פרויקט",
     restoreSuccess: "הפרויקטים שוחזרו בהצלחה מהגיבוי.",
@@ -350,6 +355,7 @@ export const translations = {
       linkStyle: "סגנון חיבור",
       strokeColor: "צבע קו",
       lineStyle: "תבנית קו",
+      lineType: "מסלול קו",
       startMarker: "סמן התחלה",
       endMarker: "סמן סוף",
       cableSize: "גודל כבל (לדוגמה 4x25 ממ״ר)",
@@ -359,6 +365,10 @@ export const translations = {
           dotted: "נקודות",
           dashDot: "קו-נקודה",
           longDash: "קו ארוך" 
+      },
+      routeTypes: {
+          straight: "ישר",
+          orthogonal: "זוויתי (90°)"
       },
       markers: { none: "ללא", arrow: "חץ", circle: "עיגול", diamond: "יהלום" },
       shapes: { rectangle: "מלבן", circle: "עיגול", square: "ריבוע" },
@@ -390,8 +400,8 @@ export const translations = {
       deleteProjectTitle: "למחוק פרויקט?",
       deletePageTitle: "למחוק עמוד?",
       deleteNodeTitle: "למחוק רכיב?",
-      deletePage: "האם אתה בטוח שברצונך למחוק עמוד זה?",
-      deleteProject: "האם אתה בטוח שברצונך למחוק את הפרויקט כולו?",
+      deletePage: "Are you sure you want to delete this page?",
+      deleteProject: "Are you sure you want to delete this entire project?",
       deleteNode: "האם למחוק רכיב זה ואת כל החיבורים שלו?",
       reset: "לאפס הכל לברירת מחדל? כל השינויים שלא נשמרו יאבדו.",
       detach: "לנתק רכיב זה? הוא יועבר לרמת רשת החשמל.",
@@ -584,6 +594,7 @@ export const translations = {
       linkStyle: "نمط الاتصال",
       strokeColor: "لون الخط",
       lineStyle: "نمط الخط",
+      lineType: "مسار الخط",
       startMarker: "علامة البداية",
       endMarker: "علامة النهاية",
       cableSize: "مقاس الكابل (مثلاً 4x25 مم)",
@@ -593,6 +604,10 @@ export const translations = {
           dotted: "منقط",
           dashDot: "خط-نقطة",
           longDash: "خط طويل"
+      },
+      routeTypes: {
+          straight: "مستقيم",
+          orthogonal: "زاوية قائمة (90°)"
       },
       markers: { none: "بدون", arrow: "سهم", circle: "دائرة", diamond: "ماسة" },
       shapes: { rectangle: "مستطيل", circle: "دائرة", square: "مربع" },
@@ -624,8 +639,8 @@ export const translations = {
       deleteProjectTitle: "حذف المشروع؟",
       deletePageTitle: "حذف الصفحة؟",
       deleteNodeTitle: "حذف المكون؟",
-      deletePage: "هل أنت متأكد أنك تريد حذف هذه الصفحة؟",
-      deleteProject: "هل أنت متأكد أنك تريد حذف هذا المشروع بالكامل؟",
+      deletePage: "Are you sure you want to delete this page?",
+      deleteProject: "Are you sure you want to delete this entire project?",
       deleteNode: "هل أنت متأكد من حذف هذا المكون وكل ما يتصل به؟",
       reset: "إعادة تعيين كل شيء للافتراضي؟ ستفقد جميع التغييرات غير المحفوظة.",
       detach: "فصل هذا المكون؟ سيتم نقله إلى مستوى شبكة المرافق.",

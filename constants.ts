@@ -1,3 +1,4 @@
+
 import { ComponentType, ConnectionStyle, PrintMetadata, Project } from './types';
 
 // --- Complex SVG Icon Definitions ---
@@ -296,6 +297,8 @@ export const DEFAULT_PRINT_METADATA: PrintMetadata = {
   revision: '',
   organization: ''
 };
+
+export const SNAP_GRID_SIZE = 20;
 
 export const DEFAULT_PROJECT: Project = {
   id: 'proj-default',

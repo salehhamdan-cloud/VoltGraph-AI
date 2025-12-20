@@ -1,5 +1,4 @@
 
-
 export enum ComponentType {
   SYSTEM_ROOT = 'SYSTEM_ROOT',
   TRANSFORMER = 'TRANSFORMER',
@@ -15,6 +14,7 @@ export enum ComponentType {
 export interface ConnectionStyle {
   strokeColor?: string;
   lineStyle?: 'solid' | 'dashed' | 'dotted' | 'dash-dot' | 'long-dash';
+  lineType?: 'straight' | 'orthogonal'; // New: Choose between straight or 90-degree lines
   startMarker?: 'none' | 'arrow' | 'circle' | 'diamond';
   endMarker?: 'none' | 'arrow' | 'circle' | 'diamond';
   cableSize?: string; // Cable size text (e.g., "4x25mm")

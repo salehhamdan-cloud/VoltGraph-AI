@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
-import { COMPONENT_CONFIG, ICON_PATHS } from '../constants';
+import { COMPONENT_CONFIG, ICON_PATHS, SNAP_GRID_SIZE } from '../constants';
 
 interface DiagramProps {
   data: ElectricalNode[];
@@ -161,7 +161,6 @@ export const Diagram: React.FC<DiagramProps> = ({
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    // Background click handler
     svg.on('click', (event) => {
       if (event.defaultPrevented) return;
       if (isCleanView && !isAnnotating) return;
@@ -511,19 +510,30 @@ export const Diagram: React.FC<DiagramProps> = ({
       const sYOffset = source.data.manualY || 0;
       const tXOffset = target.data.manualX || 0;
       const tYOffset = target.data.manualY || 0;
+      const lineType = target.data.connectionStyle?.lineType || 'orthogonal';
 
       if (orientation === 'horizontal') {
         const srcX = source.y + source.width + sXOffset;
         const srcY = source.x + sYOffset;
         const tgtX = target.y + tXOffset;
         const tgtY = target.x + tYOffset;
-        return `M${srcX},${srcY} H${(srcX + tgtX) / 2} V${tgtY} H${tgtX}`;
+
+        if (lineType === 'straight') {
+            return `M${srcX},${srcY} L${tgtX},${tgtY}`;
+        } else {
+            return `M${srcX},${srcY} H${(srcX + tgtX) / 2} V${tgtY} H${tgtX}`;
+        }
       } else {
         const srcX = source.x + sXOffset;
         const srcY = source.y + source.height + sYOffset;
         const tgtX = target.x + tXOffset;
         const tgtY = target.y + tYOffset;
-        return `M${srcX},${srcY} V${(srcY + tgtY) / 2} H${tgtX} V${tgtY}`;
+
+        if (lineType === 'straight') {
+            return `M${srcX},${srcY} L${tgtX},${tgtY}`;
+        } else {
+            return `M${srcX},${srcY} V${(srcY + tgtY) / 2} H${tgtX} V${tgtY}`;
+        }
       }
     };
 
@@ -561,74 +571,93 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const drag = d3
       .drag<SVGGElement, ExtendedHierarchyNode>()
-      .filter((event) => !isLayoutLocked && !event.button) // Ignore drag if layout is locked
+      .filter((event) => !isLayoutLocked && !event.button) 
       .on('start', function (event, d) {
         if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
         const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+        
         descendants.forEach((desc: ExtendedHierarchyNode) => {
-          desc.__initialManualX = (desc as any).data.manualX || 0;
-          desc.__initialManualY = (desc as any).data.manualY || 0;
+          desc.__initialManualX = desc.data.manualX || 0;
+          desc.__initialManualY = desc.data.manualY || 0;
+          desc.__totalDx = 0;
+          desc.__totalDy = 0;
         });
-        d3.select(this).attr('data-is-dragging', 'false');
+        
+        d3.select(this).raise();
       })
       .on('drag', function (event, d) {
         if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
         
-        // Accumulate deltas
         node.__totalDx = (node.__totalDx || 0) + event.dx;
         node.__totalDy = (node.__totalDy || 0) + event.dy;
 
-        // Check threshold for starting the drag
-        if (!node.__isDragging && (node.__totalDx ** 2 + node.__totalDy ** 2 > 16)) {
-           node.__isDragging = true;
-        }
-
-        if (node.__isDragging) {
-          const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
-          descendants.forEach((desc: ExtendedHierarchyNode) => {
-            const tempX = (desc.__initialManualX || 0) + (node.__totalDx || 0);
-            const tempY = (desc.__initialManualY || 0) + (node.__totalDy || 0);
-
-            // Update SVG element transformation manually during drag for performance
-            const el = g.select(`g.node[data-id="${(desc as any).data.id}"]`);
-            if (orientation === 'horizontal') {
-              el.attr('transform', `translate(${desc.y + tempX},${desc.x + tempY})`);
-            } else {
-              el.attr('transform', `translate(${desc.x + tempX},${desc.y + tempY})`);
-            }
-            
-            // Note: We don't update d.data.manualX/Y here to avoid Direct React state mutation
-          });
+        const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+        descendants.forEach((desc: ExtendedHierarchyNode) => {
+          const rawX = (desc.__initialManualX || 0) + (node.__totalDx || 0);
+          const rawY = (desc.__initialManualY || 0) + (node.__totalDy || 0);
           
-          // Redraw links for performance
-          linkPathSelection.attr('d', (lk) => linkGenerator(lk.source, lk.target));
-        }
+          const snappedX = Math.round(rawX / SNAP_GRID_SIZE) * SNAP_GRID_SIZE;
+          const snappedY = Math.round(rawY / SNAP_GRID_SIZE) * SNAP_GRID_SIZE;
+
+          const el = g.select(`g.node[data-id="${desc.data.id}"]`);
+          if (orientation === 'horizontal') {
+            el.attr('transform', `translate(${desc.y + snappedX},${desc.x + snappedY})`);
+          } else {
+            el.attr('transform', `translate(${desc.x + snappedX},${desc.y + snappedY})`);
+          }
+          
+          (desc.data as any)._tempX = snappedX;
+          (desc.data as any)._tempY = snappedY;
+        });
+        
+        linkPathSelection.attr('d', (lk) => {
+           const sX = (lk.source.data as any)._tempX ?? (lk.source.data.manualX || 0);
+           const sY = (lk.source.data as any)._tempY ?? (lk.source.data.manualY || 0);
+           const tX = (lk.target.data as any)._tempX ?? (lk.target.data.manualX || 0);
+           const tY = (lk.target.data as any)._tempY ?? (lk.target.data.manualY || 0);
+           
+           const lineType = lk.target.data.connectionStyle?.lineType || 'orthogonal';
+
+           if (orientation === 'horizontal') {
+             const srcX = lk.source.y + lk.source.width + sX;
+             const srcY = lk.source.x + sY;
+             const tgtX = lk.target.y + tX;
+             const tgtY = lk.target.x + tY;
+             if (lineType === 'straight') return `M${srcX},${srcY} L${tgtX},${tgtY}`;
+             return `M${srcX},${srcY} H${(srcX + tgtX) / 2} V${tgtY} H${tgtX}`;
+           } else {
+             const srcX = lk.source.x + sX;
+             const srcY = lk.source.y + lk.source.height + sY;
+             const tgtX = lk.target.x + tX;
+             const tgtY = lk.target.y + tY;
+             if (lineType === 'straight') return `M${srcX},${srcY} L${tgtX},${tgtY}`;
+             return `M${srcX},${srcY} V${(srcY + tgtY) / 2} H${tgtX} V${tgtY}`;
+           }
+        });
       })
       .on('end', function (event, d) {
         if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
-        if (node.__isDragging) {
-          const finalUpdates: { id: string; x: number; y: number }[] = [];
-          const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+        const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+        
+        const finalUpdates: { id: string; x: number; y: number }[] = [];
+        descendants.forEach((desc: ExtendedHierarchyNode) => {
+          const rawX = (desc.__initialManualX || 0) + (node.__totalDx || 0);
+          const rawY = (desc.__initialManualY || 0) + (node.__totalDy || 0);
           
-          descendants.forEach((desc: ExtendedHierarchyNode) => {
-            finalUpdates.push({
-              id: desc.data.id,
-              x: (desc.__initialManualX || 0) + (node.__totalDx || 0),
-              y: (desc.__initialManualY || 0) + (node.__totalDy || 0),
-            });
-          });
+          const snappedX = Math.round(rawX / SNAP_GRID_SIZE) * SNAP_GRID_SIZE;
+          const snappedY = Math.round(rawY / SNAP_GRID_SIZE) * SNAP_GRID_SIZE;
 
-          // Reset temporary drag states
-          node.__isDragging = false;
-          node.__totalDx = 0;
-          node.__totalDy = 0;
+          finalUpdates.push({ id: desc.data.id, x: snappedX, y: snappedY });
+          
+          delete (desc.data as any)._tempX;
+          delete (desc.data as any)._tempY;
+        });
 
-          if (onNodeMove) {
-            onNodeMove(finalUpdates);
-          }
+        if (onNodeMove) {
+          onNodeMove(finalUpdates);
         }
       });
 
@@ -755,7 +784,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     };
     
-    // ACTION BUTTONS RENDERER
     const renderActionButtons = (nodeG: d3.Selection<SVGGElement, unknown, null, undefined>, d: ExtendedHierarchyNode, isPermanent: boolean = false) => {
         nodeG.selectAll('.action-buttons').remove();
         if (isCleanView) return;
@@ -768,7 +796,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         const btnY = box.y - 20; 
         const centerX = box.x + box.w / 2;
 
-        // Delete Button
         const deleteBtn = actionsG.append('g')
             .attr('transform', `translate(${centerX - 24}, ${btnY})`)
             .style('cursor', 'pointer')
@@ -779,7 +806,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         deleteBtn.append('circle').attr('r', 8).attr('fill', '#ef4444');
         deleteBtn.append('path').attr('d', 'M-2.5,-2.5 L2.5,2.5 M-2.5,2.5 L2.5,-2.5').attr('stroke', 'white').attr('stroke-width', 1.5);
 
-        // Duplicate Button
         const dupBtn = actionsG.append('g')
             .attr('transform', `translate(${centerX}, ${btnY})`)
             .style('cursor', 'pointer')
@@ -790,7 +816,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         dupBtn.append('circle').attr('r', 8).attr('fill', '#3b82f6');
         dupBtn.append('path').attr('d', 'M-3,3 L-3,-3 L3,-3 L3,3 Z M0,-3 L0,3 M-3,0 L3,0').attr('stroke', 'white').attr('stroke-width', 1.5).attr('fill', 'none');
 
-        // Group/Collapse Button (if has children)
         if (d.children && d.children.length > 0) {
              const collapseBtn = actionsG.append('g')
                 .attr('transform', `translate(${centerX + 24}, ${btnY})`)
@@ -808,7 +833,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     };
 
-    // 1. Render Nodes
     const nodesSelection = nodesGroup
       .selectAll<SVGGElement, ExtendedHierarchyNode>('g.node')
       .data(nodesToRender)
@@ -861,7 +885,6 @@ export const Diagram: React.FC<DiagramProps> = ({
           .attr('fill', hoverFill)
           .attr('stroke', isSource ? '#f59e0b' : isSelected ? '#3b82f6' : '#64748b');
 
-        // Only show hover buttons if NOT already selected (since selected ones are permanent)
         if (!isSelected) {
             renderActionButtons(el, d, false);
         }
@@ -870,7 +893,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         const el = d3.select(this as SVGGElement);
         const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
         
-        // Remove Action Buttons ONLY if not selected (Permanent buttons stay)
         if (!isSelected) {
             el.selectAll('.action-buttons').transition().duration(200).attr('opacity', 0).remove();
         }
@@ -924,7 +946,6 @@ export const Diagram: React.FC<DiagramProps> = ({
     nodesSelection.each(function (d: any) {
       const nodeG = d3.select(this as SVGGElement);
       
-      // Permanently render action buttons if selected
       if (d.data.id === selectedNodeId) {
           renderActionButtons(nodeG, d, true);
       }
@@ -1100,14 +1121,12 @@ export const Diagram: React.FC<DiagramProps> = ({
             .text(d.data.model);
         }
         
-        // Multi-line Description Handling
         const desc = getTranslatedDescription(d.data.description);
         if (desc) {
           yOffset += 14;
           const maxLength = 25;
           const lines = [];
           if (desc.length > maxLength) {
-              // Split logic
               const mid = Math.ceil(desc.length / 2);
               const splitIndex = desc.indexOf(' ', mid);
               if (splitIndex !== -1 && splitIndex < desc.length - 5) {
@@ -1134,10 +1153,9 @@ export const Diagram: React.FC<DiagramProps> = ({
                   .attr('dy', i === 0 ? 0 : '1.2em')
                   .text(line);
           });
-          yOffset += (lines.length - 1) * 12; // Adjust for multiline
+          yOffset += (lines.length - 1) * 12;
         }
 
-        // Location Info Rendering
         if (d.data.place || d.data.building || d.data.floor) {
              yOffset += 14;
              const locText = [];
@@ -1214,12 +1232,6 @@ export const Diagram: React.FC<DiagramProps> = ({
       .style('pointer-events', 'none')
       .text('+');
 
-    const getBadgeBaseY = (d: ExtendedHierarchyNode) => {
-      if (d.data.shape && d.data.shape !== 'rectangle') return 35;
-      const box = getRectBox(d);
-      return box.y + box.h - 24;
-    };
-
     const renderBadge = (
         gNode: d3.Selection<SVGGElement, unknown, null, undefined>, 
         textValue: string, 
@@ -1262,7 +1274,7 @@ export const Diagram: React.FC<DiagramProps> = ({
              group.attr('transform', `translate(${xOffset}, -35)`);
         } else {
              const box = getRectBox(d);
-             const y = getBadgeBaseY(d);
+             const y = box.y + box.h - 24;
              group.attr('transform', `translate(${box.x + 8 + xOffset}, ${y})`);
         }
         return totalWidth;
@@ -1294,7 +1306,6 @@ export const Diagram: React.FC<DiagramProps> = ({
         }
     });
 
-    // 2. Render Cable Size Labels (Fixed Positioning)
     linksToRender.forEach((d: any) => {
         const cableText = d.target.data.connectionStyle?.cableSize;
         if (cableText) {
@@ -1312,27 +1323,25 @@ export const Diagram: React.FC<DiagramProps> = ({
             let textAnchor = 'end';
 
             if (orientation === 'horizontal') {
-                 // Push label to the LEFT of the node in ALL languages for consistency
                  xPos = tgtX - 25; 
                  yPos = tgtY - 8;
                  textAnchor = 'end'; 
             } else {
                  xPos = tgtX - 5; 
-                 yPos = tgtY - 35; // Moved closer (was -70, now -35)
+                 yPos = tgtY - 35;
                  rotation = -90;
                  textAnchor = 'start'; 
             }
 
             labelG.attr('transform', `translate(${xPos}, ${yPos}) rotate(${rotation})`);
 
-            const ltrCableText = cableText; 
             const txt = labelG.append('text')
                .attr('text-anchor', textAnchor)
                .style('font-size', '10px')
                .style('font-weight', 'bold')
                .style('fill', '#ffffff')
                .style('direction', 'ltr') 
-               .text(ltrCableText);
+               .text(cableText);
 
             const bbox = txt.node()?.getBBox();
             if (bbox) {
@@ -1402,26 +1411,15 @@ export const Diagram: React.FC<DiagramProps> = ({
     const legendW = 200;
     const legendH = 50 + totalLegendItems * 25;
 
-    let legX: number;
-    let legY: number;
+    let legX = maxX + 50;
+    let legY = minY;
 
-    // Standard positioning (Edit Mode): Top-Right of content
-    legX = maxX + 50;
-    legY = minY;
-
-    // Print Mode Positioning (Bottom-Right, Below Nodes)
     if (isPrintMode && activeProject && activeProject.printMetadata) {
         const blockW = 500;
         const blockH = 100;
-        
-        // Calculate safe Y below all nodes
-        const safeY = maxY + 60; // 60px margin below lowest node
-        
-        // Align Right edge of Legend with Right edge of Diagram (maxX)
+        const safeY = maxY + 60; 
         legX = Math.max(minX, maxX - legendW);
         legY = safeY;
-        
-        // Title Block below Legend
         const titleX = Math.max(minX, maxX - blockW);
         const titleY = legY + legendH + 20;
 
@@ -1430,7 +1428,6 @@ export const Diagram: React.FC<DiagramProps> = ({
             .attr('class', 'print-title-block')
             .style('cursor', 'pointer');
 
-        // Background rect
         titleBlockG.append('rect')
             .attr('width', blockW)
             .attr('height', blockH)
@@ -1444,11 +1441,9 @@ export const Diagram: React.FC<DiagramProps> = ({
                 if(onEditPrintSettings) onEditPrintSettings();
             });
 
-        // Horizontal dividers
         titleBlockG.append('line').attr('x1', 0).attr('y1', 33).attr('x2', blockW).attr('y2', 33).attr('stroke', 'black').attr('stroke-width', 1);
         titleBlockG.append('line').attr('x1', 0).attr('y1', 66).attr('x2', blockW).attr('y2', 66).attr('stroke', 'black').attr('stroke-width', 1);
 
-        // Vertical divider
         const dividerX = isRTL ? 150 : 350;
         titleBlockG.append('line').attr('x1', dividerX).attr('y1', 0).attr('x2', dividerX).attr('y2', 100).attr('stroke', 'black').attr('stroke-width', 1);
 
@@ -1460,34 +1455,9 @@ export const Diagram: React.FC<DiagramProps> = ({
                 e.stopPropagation();
                 if(onEditPrintSettings) onEditPrintSettings(fieldKey);
             });
-            
-            // Invisible rect for click target
-            cell.append('rect')
-                .attr('x', x - w/2)
-                .attr('y', y - 15)
-                .attr('width', w)
-                .attr('height', 30)
-                .attr('fill', 'transparent')
-                .style('pointer-events', 'all');
-
-            cell.append('text')
-                .attr('x', x)
-                .attr('y', y - 8)
-                .attr('text-anchor', 'middle')
-                .style('font-size', '8px')
-                .style('fill', '#666')
-                .style('pointer-events', 'none')
-                .text(label);
-            
-            cell.append('text')
-                .attr('x', x)
-                .attr('y', y + 8)
-                .attr('text-anchor', 'middle')
-                .style('font-size', '12px')
-                .style('font-weight', 'bold')
-                .style('fill', 'black')
-                .style('pointer-events', 'none')
-                .text(value || '-');
+            cell.append('rect').attr('x', x - w/2).attr('y', y - 15).attr('width', w).attr('height', 30).attr('fill', 'transparent').style('pointer-events', 'all');
+            cell.append('text').attr('x', x).attr('y', y - 8).attr('text-anchor', 'middle').style('font-size', '8px').style('fill', '#666').style('pointer-events', 'none').text(label);
+            cell.append('text').attr('x', x).attr('y', y + 8).attr('text-anchor', 'middle').style('font-size', '12px').style('font-weight', 'bold').style('fill', 'black').style('pointer-events', 'none').text(value || '-');
         };
 
         const wideCenter = isRTL ? (150 + blockW) / 2 : 350 / 2;
@@ -1507,162 +1477,44 @@ export const Diagram: React.FC<DiagramProps> = ({
       .attr('class', 'legend-group')
       .attr('transform', `translate(${legX}, ${legY})`);
 
-    legendG.append('rect')
-      .attr('width', legendW)
-      .attr('height', legendH)
-      .attr('rx', 8)
-      .attr('fill', isDark ? '#1e293b' : '#ffffff')
-      .attr('stroke', secondaryTextColor)
-      .attr('stroke-width', 1)
-      .attr('opacity', 0.95);
-
-    legendG.append('text')
-      .attr('x', legendW / 2)
-      .attr('y', 25)
-      .attr('text-anchor', 'middle')
-      .attr('font-weight', 'bold')
-      .attr('fill', textColor)
-      .attr('font-size', '12px')
-      .text(t.legend.title);
+    legendG.append('rect').attr('width', legendW).attr('height', legendH).attr('rx', 8).attr('fill', isDark ? '#1e293b' : '#ffffff').attr('stroke', secondaryTextColor).attr('stroke-width', 1).attr('opacity', 0.95);
+    legendG.append('text').attr('x', legendW / 2).attr('y', 25).attr('text-anchor', 'middle').attr('font-weight', 'bold').attr('fill', textColor).attr('font-size', '12px').text(t.legend.title);
 
     types.forEach((type, i) => {
       const y = 50 + i * 25;
       const config = COMPONENT_CONFIG[type];
-
-      let iconX: number;
-      let textX: number;
-      let textAnchor: 'start' | 'middle' | 'end';
-
-      if (isRTL) {
-        iconX = legendW - 25;
-        textX = legendW / 2;
-        textAnchor = 'middle';
-      } else {
-        iconX = 25;
-        textX = 45;
-        textAnchor = 'start';
-      }
-
-      legendG.append('circle')
-        .attr('cx', iconX)
-        .attr('cy', y)
-        .attr('r', 8)
-        .attr('fill', isDark ? '#0f172a' : '#f8fafc')
-        .attr('stroke', config.color)
-        .attr('stroke-width', 1.5);
-
+      let iconX = isRTL ? legendW - 25 : 25;
+      let textX = isRTL ? legendW / 2 : 45;
+      legendG.append('circle').attr('cx', iconX).attr('cy', y).attr('r', 8).attr('fill', isDark ? '#0f172a' : '#f8fafc').attr('stroke', config.color).attr('stroke-width', 1.5);
       const itemG = legendG.append('g').attr('transform', `translate(${iconX - 6}, ${y - 6})`);
       renderIcon(itemG, config.icon, config.color, 'scale(0.5)');
-
-      legendG.append('text')
-        .attr('x', textX)
-        .attr('y', y)
-        .attr('dominant-baseline', 'middle')
-        .attr('fill', textColor)
-        .attr('font-size', '11px')
-        .attr('text-anchor', textAnchor)
-        .text(t.componentTypes[type]);
+      legendG.append('text').attr('x', textX).attr('y', y).attr('dominant-baseline', 'middle').attr('fill', textColor).attr('font-size', '11px').attr('text-anchor', isRTL ? 'middle' : 'start').text(t.componentTypes[type]);
     });
 
     const sepY = 50 + types.length * 25 + 10;
-    legendG.append('line')
-       .attr('x1', 20)
-       .attr('y1', sepY)
-       .attr('x2', legendW - 20)
-       .attr('y2', sepY)
-       .attr('stroke', secondaryTextColor)
-       .attr('stroke-width', 1)
-       .attr('opacity', 0.5);
+    legendG.append('line').attr('x1', 20).attr('y1', sepY).attr('x2', legendW - 20).attr('y2', sepY).attr('stroke', secondaryTextColor).attr('stroke-width', 1).attr('opacity', 0.5);
 
     badgeItems.forEach((item, i) => {
         const y = sepY + 20 + i * 25;
-        let iconX: number;
-        let textX: number;
-        let textAnchor: 'start' | 'middle' | 'end';
-
-        if (isRTL) {
-            iconX = legendW - 25;
-            textX = legendW / 2;
-            textAnchor = 'middle';
-        } else {
-            iconX = 25;
-            textX = 45;
-            textAnchor = 'start';
-        }
-
-        legendG.append('rect')
-            .attr('x', iconX - 10)
-            .attr('y', y - 9)
-            .attr('width', 20)
-            .attr('height', 18)
-            .attr('rx', 9)
-            .attr('fill', isDark ? '#1e293b' : '#f1f5f9')
-            .attr('stroke', item.color)
-            .attr('stroke-width', 0.5);
-
+        let iconX = isRTL ? legendW - 25 : 25;
+        let textX = isRTL ? legendW / 2 : 45;
+        legendG.append('rect').attr('x', iconX - 10).attr('y', y - 9).attr('width', 20).attr('height', 18).attr('rx', 9).attr('fill', isDark ? '#1e293b' : '#f1f5f9').attr('stroke', item.color).attr('stroke-width', 0.5);
         const itemG = legendG.append('g').attr('transform', `translate(${iconX - 6}, ${y - 6})`);
         renderIcon(itemG, item.icon, item.color, 'scale(0.5)');
-
-        legendG.append('text')
-            .attr('x', textX)
-            .attr('y', y)
-            .attr('dominant-baseline', 'middle')
-            .attr('fill', textColor)
-            .attr('font-size', '11px')
-            .attr('text-anchor', textAnchor)
-            .text(item.label);
+        legendG.append('text').attr('x', textX).attr('y', y).attr('dominant-baseline', 'middle').attr('fill', textColor).attr('font-size', '11px').attr('text-anchor', isRTL ? 'middle' : 'start').text(item.label);
     });
 
   }, [
-    data,
-    dimensions,
-    onNodeClick,
-    onLinkClick,
-    selectedNodeId,
-    selectedLinkId,
-    orientation,
-    searchMatches,
-    isConnectMode,
-    connectionSourceId,
-    t,
-    language,
-    theme,
-    onBackgroundClick,
-    multiSelection,
-    isPrintMode,
-    activeProject,
-    onEditPrintSettings,
-    onAddRoot,
-    onAddGenerator,
-    onDuplicateChild,
-    onDeleteNode,
-    onToggleCollapse,
-    onGroupNode,
-    onNodeMove,
-    onDisconnectLink,
-    isCleanView,
-    activeFilters,
-    annotations,
-    isAnnotating,
-    annotationColor,
-    isLayoutLocked
+    data, dimensions, onNodeClick, onLinkClick, selectedNodeId, selectedLinkId, orientation, searchMatches,
+    isConnectMode, connectionSourceId, t, language, theme, onBackgroundClick, multiSelection, isPrintMode,
+    activeProject, onEditPrintSettings, onAddRoot, onAddGenerator, onDuplicateChild, onDeleteNode,
+    onToggleCollapse, onGroupNode, onNodeMove, onDisconnectLink, isCleanView, activeFilters, annotations,
+    isAnnotating, annotationColor, isLayoutLocked
   ]);
 
   return (
-    <div
-      ref={wrapperRef}
-      className={`w-full h-full relative overflow-hidden ${
-        isDark ? 'bg-slate-900' : 'bg-white'
-      }`}
-      style={{ touchAction: 'none' }}
-    >
-      <svg
-        id="diagram-svg"
-        ref={svgRef}
-        width="100%"
-        height="100%"
-        className="block"
-      />
+    <div ref={wrapperRef} className={`w-full h-full relative overflow-hidden ${isDark ? 'bg-slate-900' : 'bg-white'}`} style={{ touchAction: 'none' }}>
+      <svg id="diagram-svg" ref={svgRef} width="100%" height="100%" className="block" />
     </div>
   );
 };

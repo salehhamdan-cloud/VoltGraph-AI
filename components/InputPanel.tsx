@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ComponentType, NewNodeData, ElectricalNode, ConnectionStyle, NodeShape } from '../types';
 import { COMMON_MODELS, COMPONENT_CONFIG, DEFAULT_CONNECTION_STYLE } from '../constants';
@@ -134,6 +133,7 @@ export const InputPanel: React.FC<InputPanelProps> = ({
           setConnectionData({
               strokeColor: selectedNode.connectionStyle?.strokeColor || COMPONENT_CONFIG[selectedNode.type]?.color || '#475569',
               lineStyle: selectedNode.connectionStyle?.lineStyle || 'solid',
+              lineType: selectedNode.connectionStyle?.lineType || 'orthogonal',
               startMarker: selectedNode.connectionStyle?.startMarker || 'none',
               endMarker: selectedNode.connectionStyle?.endMarker || 'none',
               cableSize: selectedNode.connectionStyle?.cableSize || ''
@@ -212,7 +212,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     }
   };
 
-  // --- Bulk Editing Mode ---
   if (multiSelectionCount > 1) {
       return (
         <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg overflow-hidden sticky top-4">
@@ -285,7 +284,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                     </select>
                 </div>
 
-                {/* Location Fields for Bulk Edit */}
                 <div className="bg-slate-900/50 p-3 rounded border border-slate-700/50 space-y-3 mt-4">
                     <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.inputPanel.location}</h4>
                     <div className="grid grid-cols-2 gap-4">
@@ -385,7 +383,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
     );
   }
 
-  // --- Link Styling Mode ---
   if (selectionMode === 'link') {
       return (
           <div className="bg-slate-800 rounded-xl border border-slate-700 shadow-lg overflow-hidden sticky top-4">
@@ -429,6 +426,19 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                         placeholder="e.g. 4x25mm²"
                         className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
                     />
+                  </div>
+
+                  <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">{t.inputPanel.lineType}</label>
+                      <select 
+                        name="lineType"
+                        value={connectionData.lineType || 'orthogonal'}
+                        onChange={handleConnectionChange}
+                        className="w-full bg-slate-900 border border-slate-700 text-white rounded px-3 py-2 text-sm"
+                      >
+                          <option value="orthogonal">{t.inputPanel.routeTypes.orthogonal}</option>
+                          <option value="straight">{t.inputPanel.routeTypes.straight}</option>
+                      </select>
                   </div>
                   
                   <div>
@@ -494,8 +504,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
           </div>
       );
   }
-
-  // --- Normal Node Edit Mode ---
 
   const showMeterOptions = formData.type === ComponentType.BREAKER || formData.type === ComponentType.SWITCH || formData.type === ComponentType.DISTRIBUTION_BOARD;
   const showKvaOption = formData.type === ComponentType.TRANSFORMER || formData.type === ComponentType.GENERATOR || formData.type === ComponentType.UPS;
@@ -701,7 +709,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </>
             )}
 
-            {/* Not Connected to Meter Checkbox */}
             <div className="flex items-center gap-2">
                 <input
                     type="checkbox"
@@ -716,7 +723,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </label>
             </div>
 
-            {/* Generator Connection */}
             <div className="flex items-center gap-2">
                 <input
                     type="checkbox"
@@ -744,7 +750,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </div>
             )}
 
-            {/* A/C Checkbox */}
             <div className="flex items-center gap-2">
                 <input
                     type="checkbox"
@@ -759,7 +764,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
                 </label>
             </div>
 
-            {/* Reserved Checkbox */}
             <div className="flex items-center gap-2">
                 <input
                     type="checkbox"
@@ -814,7 +818,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             </div>
         )}
 
-        {/* Location Info Section */}
         <div className="bg-slate-900/50 p-3 rounded border border-slate-700/50 space-y-3">
             <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.inputPanel.location}</h4>
             <div className="grid grid-cols-2 gap-4">
@@ -862,7 +865,6 @@ export const InputPanel: React.FC<InputPanelProps> = ({
             />
         </div>
 
-        {/* Downstream Connections List */}
         {activeTab === 'edit' && (
             <div className="mt-4 pt-4 border-t border-slate-700">
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">{t.inputPanel.downstreamConnections}</h4>
