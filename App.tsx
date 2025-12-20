@@ -123,7 +123,7 @@ export default function App() {
   const [activePageId, setActivePageId] = useState<string>(projects[0].pages[0].id);
   
   const [selectedNode, setSelectedNode] = useState<ElectricalNode | null>(null);
-  const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set());
+  const [multiSelection, setMultiSelection] = useState<Set<string>>(new Set<string>());
   const [selectionMode, setSelectionMode] = useState<'node' | 'link'>('node');
   const [clipboard, setClipboard] = useState<ElectricalNode | null>(null);
   const [selectedLinkParentId, setSelectedLinkParentId] = useState<string | null>(null);
@@ -311,7 +311,7 @@ export default function App() {
           return { ...page, items: newItems };
       });
 
-      setMultiSelection(new Set());
+      setMultiSelection(new Set<string>());
       setSelectedNode(null);
       setIsConnectMode(false);
       setConnectionSource(null);
@@ -389,7 +389,7 @@ export default function App() {
           setSelectedNode(targetNode);
           setSelectedLinkParentId(sourceId); 
           setSelectionMode('link');
-          setMultiSelection(new Set());
+          setMultiSelection(new Set<string>());
       }
   };
 
@@ -438,7 +438,7 @@ export default function App() {
               } else {
                   setSelectionMode('node');
                   setSelectedNode(null);
-                  setMultiSelection(new Set());
+                  setMultiSelection(new Set<string>());
                   setIsConnectMode(false);
                   setConnectionSource(null);
               }
@@ -482,7 +482,7 @@ export default function App() {
   const handleBackgroundClick = () => {
     setSelectedNode(null);
     setSelectionMode('node');
-    setMultiSelection(new Set());
+    setMultiSelection(new Set<string>());
     setIsConnectMode(false);
     setConnectionSource(null);
     setShowAddIndependentMenu(false);
@@ -555,13 +555,11 @@ export default function App() {
     } else {
         if (isShiftKey) {
             setMultiSelection(prev => {
-                // Fix: Added explicit generic type to new Set to avoid unknown type issues during Set iteration
                 const newSet = new Set<string>(prev);
                 if (newSet.has(node.id)) newSet.delete(node.id);
                 else newSet.add(node.id);
                 if (newSet.size === 1) {
                     const id = Array.from(newSet)[0];
-                    // Fix: Added type guard for 'id' to ensure it's a string before passing to findNode
                     if (typeof id === 'string') {
                         const singleNode = findNode(activePage.items, id);
                         if(singleNode) setSelectedNode(singleNode);
@@ -573,7 +571,7 @@ export default function App() {
             });
         } else {
             setSelectedNode(node);
-            setMultiSelection(new Set([node.id]));
+            setMultiSelection(new Set<string>([node.id]));
             setSelectionMode('node');
         }
     }
@@ -604,7 +602,7 @@ export default function App() {
       const node = findNode(activePage.items, nodeId);
       if (node) {
           setSelectedNode(node);
-          setMultiSelection(new Set([node.id]));
+          setMultiSelection(new Set<string>([node.id]));
           setSelectionMode('node');
       }
   };
@@ -858,48 +856,59 @@ export default function App() {
       const svgElement = document.getElementById('diagram-svg') as unknown as SVGSVGElement;
       if (!svgElement) return null;
 
-      const mainGroup = svgElement.querySelector('g');
-      if (!mainGroup) return null;
-
-      // 1. Get the actual bounding box of the diagram contents (including legend and title block)
-      const bbox = (mainGroup as SVGGElement).getBBox();
-      const padding = 60;
-
-      // 2. Clone the SVG to manipulate it for export
+      // 1. Clone the SVG to manipulate it
       const clone = svgElement.cloneNode(true) as SVGSVGElement;
       const cloneGroup = clone.querySelector('g');
       if (!cloneGroup) return null;
 
-      // 3. Remove temporary UI elements from clone
-      const uiElements = clone.querySelectorAll('.action-buttons, .temp-drawing, .print-layout-edit-btn');
-      uiElements.forEach(el => el.remove());
+      // 2. Clear user view transformations (zoom/pan) to get real coordinates
+      cloneGroup.setAttribute('transform', 'translate(0,0) scale(1)');
 
-      // 4. Calculate final dimensions
+      // 3. Remove temporary/UI elements that shouldn't be in the export
+      clone.querySelectorAll('.action-buttons, .temp-drawing, .print-layout-edit-btn, .link-hit').forEach(el => el.remove());
+
+      // 4. Browsers need the element in the DOM to calculate BBox accurately
+      const hiddenContainer = document.createElement('div');
+      hiddenContainer.style.position = 'absolute';
+      hiddenContainer.style.visibility = 'hidden';
+      hiddenContainer.style.width = '0';
+      hiddenContainer.style.height = '0';
+      hiddenContainer.style.overflow = 'hidden';
+      document.body.appendChild(hiddenContainer);
+      hiddenContainer.appendChild(clone);
+
+      // 5. Calculate bounding box of all contents
+      const bbox = (cloneGroup as SVGGElement).getBBox();
+      const padding = 60;
+      
       const width = bbox.width + padding * 2;
       const height = bbox.height + padding * 2;
       
-      // 5. Set precise viewBox to encompass all drawing content
+      // 6. Finalize SVG attributes
       clone.setAttribute('width', width.toString());
       clone.setAttribute('height', height.toString());
       clone.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${width} ${height}`);
-      
-      // 6. Force high-quality styles and backgrounds
       clone.style.backgroundColor = isDark ? '#0f172a' : '#ffffff';
-      
-      // Add font and style definitions directly into the SVG for standalone use
+      clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+      // 7. Embed styles for fonts and high-quality rendering
       const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
       style.textContent = `
           @import url('https://fonts.googleapis.com/icon?family=Material+Icons+Round');
-          text { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+          text { font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
           .node text { pointer-events: none; }
-          .node-bg { transition: none !important; }
+          .node-bg { transition: none !important; shape-rendering: geometricPrecision; }
+          path { shape-rendering: geometricPrecision; }
       `;
       clone.insertBefore(style, clone.firstChild);
 
       const serializer = new XMLSerializer();
       let svgString = serializer.serializeToString(clone);
       
-      // Fix namespaces for browsers and external viewers
+      // Cleanup
+      document.body.removeChild(hiddenContainer);
+
+      // Fix missing namespaces for standalone viewer compatibility
       if(!svgString.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
           svgString = svgString.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
       }
@@ -1001,15 +1010,15 @@ export default function App() {
           return;
       }
 
-      // PDF and PNG require Canvas conversion
+      // Logic for PNG/PDF (Canvas-based)
       const parser = new DOMParser();
       const doc = parser.parseFromString(svgString, "image/svg+xml");
       const svg = doc.documentElement;
       const width = parseFloat(svg.getAttribute('width') || '800');
       const height = parseFloat(svg.getAttribute('height') || '600');
       
+      const scale = format === 'pdf' ? 3 : 2; // High DPI
       const canvas = document.createElement('canvas');
-      const scale = format === 'pdf' ? 3 : 2; // High resolution
       canvas.width = width * scale;
       canvas.height = height * scale;
       const ctx = canvas.getContext('2d');
@@ -1021,6 +1030,7 @@ export default function App() {
       const url = URL.createObjectURL(svgBlob);
 
       img.onload = () => {
+          // Fill background for non-SVG formats
           ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
           ctx.fillRect(0, 0, width, height);
           ctx.drawImage(img, 0, 0, width, height);
@@ -1039,11 +1049,11 @@ export default function App() {
                               <title>${baseFileName}</title>
                               <style>
                                   body { margin: 0; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; font-family: sans-serif; }
-                                  img { max-width: 100%; height: auto; box-shadow: 0 0 20px rgba(0,0,0,0.1); background: white; margin: 20px 0; }
+                                  img { max-width: 100%; height: auto; box-shadow: 0 0 40px rgba(0,0,0,0.15); background: white; margin: 40px 0; }
                                   @media print {
                                       body { background: white; padding: 0; }
                                       img { box-shadow: none; margin: 0; width: 100%; }
-                                      @page { margin: 1cm; }
+                                      @page { margin: 1cm; size: auto; }
                                   }
                               </style>
                           </head>
@@ -1054,7 +1064,7 @@ export default function App() {
                                       setTimeout(() => { 
                                           window.print(); 
                                           window.close(); 
-                                      }, 500);
+                                      }, 800);
                                   };
                               </script>
                           </body>
@@ -1067,9 +1077,9 @@ export default function App() {
       };
       
       img.onerror = (e) => {
-          console.error("SVG Image Rendering Error:", e);
+          console.error("SVG Rendering Error:", e);
           URL.revokeObjectURL(url);
-          alert("Failed to render diagram for export. Try SVG or JSON format.");
+          alert("Could not process high-resolution render. Falling back to SVG/JSON.");
           setShowExportModal(false);
       };
 
@@ -1258,7 +1268,7 @@ export default function App() {
       setIsPrintMode(true);
       setShowProjectSidebar(true);
       setSelectedNode(null);
-      setMultiSelection(new Set());
+      setMultiSelection(new Set<string>());
       setSelectionMode('node');
       setIsConnectMode(false);
       setConnectionSource(null);
@@ -1400,7 +1410,7 @@ export default function App() {
                 title={t.linkComponents}
             >
                 <span className="material-icons-round">link</span>
-                {isConnectMode && <span className="text-xs font-bold his-1">{t.linking}</span>}
+                {isConnectMode && <span className="text-xs font-bold px-1">{t.linking}</span>}
             </button>
 
              <button onClick={() => setOrientation(prev => prev === 'horizontal' ? 'vertical' : 'horizontal')} className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">
@@ -1701,7 +1711,7 @@ export default function App() {
                                         handleDeleteNodeClick(selectedNode);
                                     }
                                 }}
-                                onCancel={() => { setSelectedNode(null); setMultiSelection(new Set()); setSelectionMode('node'); }}
+                                onCancel={() => { setSelectedNode(null); setMultiSelection(new Set<string>()); setSelectionMode('node'); }}
                                 onDetach={handleDetachNode}
                                 onStartConnection={handleStartConnection}
                                 onNavigate={handleNavigateToNode}
