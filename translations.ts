@@ -1,5 +1,4 @@
 
-
 import { ComponentType } from "./types";
 
 export const translations = {
@@ -20,6 +19,8 @@ export const translations = {
     toggleOrientation: "Toggle Orientation",
     toggleTheme: "Toggle Theme",
     togglePrintMode: "Toggle Print Layout",
+    lockLayout: "Lock Layout",
+    unlockLayout: "Unlock Layout",
     cleanView: "Clean View (Fullscreen)",
     exitCleanView: "Exit Clean View",
     analyze: "Analyze",
@@ -252,6 +253,8 @@ export const translations = {
     toggleOrientation: "שנה כיוון",
     toggleTheme: "שנה ערכת נושא",
     togglePrintMode: "מצב הדפסה",
+    lockLayout: "נעל פריסה",
+    unlockLayout: "שחרר פריסה",
     cleanView: "תצוגה נקייה (מסך מלא)",
     exitCleanView: "צא מתצוגה נקייה",
     analyze: "נתח",
@@ -335,7 +338,7 @@ export const translations = {
       location: "מיקום",
       place: "מקום / חדר",
       building: "בניין",
-      floor: "קומה",
+      floor: "floor",
       addToDiagram: "הוסף לדיאגרמה",
       saveChanges: "שמור שינויים",
       applyBulk: "החל על כל הנבחרים",
@@ -484,6 +487,8 @@ export const translations = {
     toggleOrientation: "تبديل الاتجاه",
     toggleTheme: "تبديل السمة",
     togglePrintMode: "تخطيط الطباعة",
+    lockLayout: "قفل المخطط",
+    unlockLayout: "فك قفل المخطط",
     cleanView: "عرض نظيف (ملء الشاشة)",
     exitCleanView: "الخروج من العرض النظيف",
     analyze: "تحليل",
@@ -573,7 +578,7 @@ export const translations = {
       applyBulk: "تطبيق على الكل",
       close: "إغلاق",
       deleteComponent: "حذف المكون",
-      confirmDelete: "هل أنت متأكد أنك تريد حذف هذا المكون وجميع توابعه؟",
+      confirmDelete: "هل أنت متأكد أنك تريد حذف هذا المكون وجميع توابع؟",
       downstreamConnections: "اتصالات المصب",
       noConnections: "لا توجد اتصالات صادرة.",
       linkStyle: "نمط الاتصال",

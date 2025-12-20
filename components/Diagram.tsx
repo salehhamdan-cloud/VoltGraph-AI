@@ -1,5 +1,4 @@
 
-
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { ElectricalNode, ComponentType, Project } from '../types';
@@ -37,6 +36,7 @@ interface DiagramProps {
   isAnnotating?: boolean;
   annotationColor?: string;
   onAnnotationAdd?: (path: string, color: string) => void;
+  isLayoutLocked?: boolean;
 }
 
 type ExtendedHierarchyNode = Omit<
@@ -94,7 +94,8 @@ export const Diagram: React.FC<DiagramProps> = ({
   annotations = [],
   isAnnotating = false,
   annotationColor = '#ef4444',
-  onAnnotationAdd
+  onAnnotationAdd,
+  isLayoutLocked = false
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -560,6 +561,7 @@ export const Diagram: React.FC<DiagramProps> = ({
 
     const drag = d3
       .drag<SVGGElement, ExtendedHierarchyNode>()
+      .filter((event) => !isLayoutLocked && !event.button) // Ignore drag if layout is locked
       .on('start', function (event, d) {
         if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
@@ -573,58 +575,59 @@ export const Diagram: React.FC<DiagramProps> = ({
       .on('drag', function (event, d) {
         if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
-        if (!node.__isDragging && event.dx * event.dx + event.dy * event.dy > 0) {
-          node.__totalDx = (node.__totalDx || 0) + event.dx;
-          node.__totalDy = (node.__totalDy || 0) + event.dy;
-          if ((node.__totalDx ** 2 + node.__totalDy ** 2 > 16)) {
-            node.__isDragging = true;
-          }
+        
+        // Accumulate deltas
+        node.__totalDx = (node.__totalDx || 0) + event.dx;
+        node.__totalDy = (node.__totalDy || 0) + event.dy;
+
+        // Check threshold for starting the drag
+        if (!node.__isDragging && (node.__totalDx ** 2 + node.__totalDy ** 2 > 16)) {
+           node.__isDragging = true;
         }
 
         if (node.__isDragging) {
           const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
           descendants.forEach((desc: ExtendedHierarchyNode) => {
-            const currentX = ((desc as any).data.manualX || 0) + event.dx;
-            const currentY = ((desc as any).data.manualY || 0) + event.dy;
-            (desc as any).data.manualX = currentX;
-            (desc as any).data.manualY = currentY;
+            const tempX = (desc.__initialManualX || 0) + (node.__totalDx || 0);
+            const tempY = (desc.__initialManualY || 0) + (node.__totalDy || 0);
 
+            // Update SVG element transformation manually during drag for performance
             const el = g.select(`g.node[data-id="${(desc as any).data.id}"]`);
-            const offsetX = (desc as any).data.manualX || 0;
-            const offsetY = (desc as any).data.manualY || 0;
-
             if (orientation === 'horizontal') {
-              el.attr(
-                'transform',
-                `translate(${desc.y + offsetX},${desc.x + offsetY})`
-              );
+              el.attr('transform', `translate(${desc.y + tempX},${desc.x + tempY})`);
             } else {
-              el.attr(
-                'transform',
-                `translate(${desc.x + offsetX},${desc.y + offsetY})`
-              );
+              el.attr('transform', `translate(${desc.x + tempX},${desc.y + tempY})`);
             }
+            
+            // Note: We don't update d.data.manualX/Y here to avoid Direct React state mutation
           });
+          
+          // Redraw links for performance
+          linkPathSelection.attr('d', (lk) => linkGenerator(lk.source, lk.target));
         }
       })
       .on('end', function (event, d) {
         if (isCleanView) return; 
         const node = d as ExtendedHierarchyNode;
         if (node.__isDragging) {
+          const finalUpdates: { id: string; x: number; y: number }[] = [];
+          const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
+          
+          descendants.forEach((desc: ExtendedHierarchyNode) => {
+            finalUpdates.push({
+              id: desc.data.id,
+              x: (desc.__initialManualX || 0) + (node.__totalDx || 0),
+              y: (desc.__initialManualY || 0) + (node.__totalDy || 0),
+            });
+          });
+
+          // Reset temporary drag states
           node.__isDragging = false;
           node.__totalDx = 0;
           node.__totalDy = 0;
-          const updates: { id: string; x: number; y: number }[] = [];
-          const descendants = node.descendants() as unknown as ExtendedHierarchyNode[];
-          descendants.forEach((desc: ExtendedHierarchyNode) => {
-            updates.push({
-              id: (desc as any).data.id,
-              x: (desc as any).data.manualX || 0,
-              y: (desc as any).data.manualY || 0,
-            });
-          });
+
           if (onNodeMove) {
-            onNodeMove(updates);
+            onNodeMove(finalUpdates);
           }
         }
       });
@@ -846,7 +849,10 @@ export const Diagram: React.FC<DiagramProps> = ({
         const isSelected = d.data.id === selectedNodeId || multiSelection.has(d.data.id);
         const isSource = d.data.id === connectionSourceId;
         const el = d3.select(this as SVGGElement);
-        el.style('cursor', 'move');
+        
+        if (!isLayoutLocked) {
+            el.style('cursor', 'move');
+        }
         
         const hoverFill = isDark ? '#334155' : '#e2e8f0';
         el.select<SVGRectElement | SVGCircleElement>('.node-bg')
@@ -881,7 +887,7 @@ export const Diagram: React.FC<DiagramProps> = ({
           )
           .attr('stroke', isSource ? '#f59e0b' : isSelected ? '#3b82f6' : secondaryTextColor);
       })
-      .style('cursor', () => isCleanView ? 'default' : 'move')
+      .style('cursor', () => isCleanView ? 'default' : isLayoutLocked ? 'pointer' : 'move')
       .style('filter', (d) => {
           if (isCleanView && activeFilters.size > 0) {
               const matches = 
@@ -1319,13 +1325,14 @@ export const Diagram: React.FC<DiagramProps> = ({
 
             labelG.attr('transform', `translate(${xPos}, ${yPos}) rotate(${rotation})`);
 
+            const ltrCableText = cableText; 
             const txt = labelG.append('text')
                .attr('text-anchor', textAnchor)
                .style('font-size', '10px')
                .style('font-weight', 'bold')
                .style('fill', '#ffffff')
                .style('direction', 'ltr') 
-               .text(cableText);
+               .text(ltrCableText);
 
             const bbox = txt.node()?.getBBox();
             if (bbox) {
@@ -1411,12 +1418,10 @@ export const Diagram: React.FC<DiagramProps> = ({
         const safeY = maxY + 60; // 60px margin below lowest node
         
         // Align Right edge of Legend with Right edge of Diagram (maxX)
-        // If diagram is narrow, align with minX + width
         legX = Math.max(minX, maxX - legendW);
         legY = safeY;
         
         // Title Block below Legend
-        // Align Right edge of Title Block with Right edge of Diagram (maxX)
         const titleX = Math.max(minX, maxX - blockW);
         const titleY = legY + legendH + 20;
 
@@ -1639,7 +1644,8 @@ export const Diagram: React.FC<DiagramProps> = ({
     activeFilters,
     annotations,
     isAnnotating,
-    annotationColor
+    annotationColor,
+    isLayoutLocked
   ]);
 
   return (

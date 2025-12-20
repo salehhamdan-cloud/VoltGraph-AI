@@ -139,6 +139,7 @@ export default function App() {
   const [isPrintMode, setIsPrintMode] = useState(false);
   const [printSettingsFocus, setPrintSettingsFocus] = useState<string | undefined>(undefined);
   const [isCleanView, setIsCleanView] = useState(false);
+  const [isLayoutLocked, setIsLayoutLocked] = useState(true);
   
   const [activeFilters, setActiveFilters] = useState<Set<string>>(new Set());
   
@@ -667,13 +668,6 @@ export default function App() {
             floor: data.floor,
             customColor: data.customColor,
             customBgColor: data.customBgColor,
-            hasMeter: data.hasMeter,
-            meterNumber: data.meterNumber,
-            hasGeneratorConnection: data.hasGeneratorConnection,
-            generatorName: data.generatorName,
-            isExcludedFromMeter: data.isExcludedFromMeter,
-            isAirConditioning: data.isAirConditioning,
-            isReserved: data.isReserved,
             shape: data.shape,
             customImage: data.customImage,
             children: [],
@@ -778,6 +772,7 @@ export default function App() {
   };
 
   const handleNodeMove = (updates: {id: string, x: number, y: number}[]) => {
+      saveToHistory();
       const updateMap = new Map(updates.map(u => [u.id, u]));
       updatePage((page) => {
           const updateTree = (node: ElectricalNode): ElectricalNode => {
@@ -1396,6 +1391,14 @@ export default function App() {
                 <span className="material-icons-round">fullscreen</span>
             </button>
 
+            <button 
+                onClick={() => setIsLayoutLocked(!isLayoutLocked)} 
+                className={`p-2 rounded-lg border transition-all ${isLayoutLocked ? 'bg-red-600/20 text-red-400 border-red-500/50' : 'bg-green-600/20 text-green-400 border-green-500/50'}`}
+                title={isLayoutLocked ? t.unlockLayout : t.lockLayout}
+             >
+                <span className="material-icons-round">{isLayoutLocked ? 'lock' : 'lock_open'}</span>
+            </button>
+
              <button onClick={() => setTheme(prev => prev === 'light' ? 'dark' : 'light')} className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">
                 <span className="material-icons-round">{theme === 'light' ? 'dark_mode' : 'light_mode'}</span>
             </button>
@@ -1652,6 +1655,7 @@ export default function App() {
                     isAnnotating={isAnnotating}
                     annotationColor={annotationColor}
                     onAnnotationAdd={handleAnnotationAdd}
+                    isLayoutLocked={isLayoutLocked}
                 />
             </div>
         </div>
