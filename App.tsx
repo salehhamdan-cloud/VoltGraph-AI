@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Diagram } from './components/Diagram';
 import { InputPanel } from './components/InputPanel';
@@ -16,7 +15,7 @@ import { translations } from './translations';
 type Language = 'en' | 'he' | 'ar';
 type Theme = 'light' | 'dark';
 
-// --- Helper Functions (Moved outside component for stability) ---
+// --- Helper Functions ---
 
 const generateId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
@@ -100,7 +99,6 @@ export default function App() {
       const savedData = localStorage.getItem('voltgraph_data');
       let loadedProjects = savedData ? JSON.parse(savedData) : [DEFAULT_PROJECT];
       
-      // Data Migration: Convert legacy rootNode to items[] array
       loadedProjects = loadedProjects.map((p: any) => ({
           ...p,
           pages: p.pages.map((page: any) => {
@@ -218,15 +216,7 @@ export default function App() {
     setFuture(prev => [JSON.parse(JSON.stringify(projects)), ...prev]);
     setProjects(previousState);
     setHistory(newHistory);
-    const prevProject = previousState.find(p => p.id === activeProjectId);
-    if (!prevProject && previousState.length > 0) {
-        setActiveProjectId(previousState[0].id);
-        setActivePageId(previousState[0].pages[0].id);
-    } else if (prevProject) {
-        const prevPage = prevProject.pages.find(p => p.id === activePageId);
-        if (!prevPage) setActivePageId(prevProject.pages[0].id);
-    }
-  }, [history, projects, activeProjectId, activePageId]);
+  }, [history, projects]);
 
   const handleRedo = useCallback(() => {
     if (future.length === 0) return;
@@ -235,15 +225,7 @@ export default function App() {
     setHistory(prev => [...prev, JSON.parse(JSON.stringify(projects))]);
     setProjects(nextState);
     setFuture(newFuture);
-    const nextProject = nextState.find(p => p.id === activeProjectId);
-    if (!nextProject && nextState.length > 0) {
-        setActiveProjectId(nextState[0].id);
-        setActivePageId(nextState[0].pages[0].id);
-    } else if (nextProject) {
-        const nextPage = nextProject.pages.find(p => p.id === activePageId);
-        if (!nextPage) setActivePageId(nextProject.pages[0].id);
-    }
-  }, [future, projects, activeProjectId, activePageId]);
+  }, [future, projects]);
 
   const updatePage = useCallback((updater: (page: Page) => Page) => {
       setProjects(prevProjects => {
@@ -359,7 +341,7 @@ export default function App() {
       const nodeToDelete = node || selectedNode;
       if (!nodeToDelete) return;
       requestConfirmation(`${t.dialogs.deleteNodeTitle}`, `${t.dialogs.deleteNode}`, () => executeDeleteNode(nodeToDelete));
-  }, [selectedNode, t, updatePage, saveToHistory]);
+  }, [selectedNode, t, executeDeleteNode]);
 
   const handleDisconnectLink = () => {
       if (!selectedNode || !selectedLinkParentId) return;
@@ -469,32 +451,13 @@ export default function App() {
       selectedNode, 
       multiSelection, 
       clipboard, 
-      activeProjectId, 
-      activePageId, 
       handleUndo, 
       handleRedo, 
       handleCopy, 
       handlePaste, 
       t, 
-      updatePage, 
-      saveToHistory,
       isCleanView
   ]); 
-
-  useEffect(() => {
-      setSelectedNode(null);
-      setSelectionMode('node');
-      setIsConnectMode(false);
-      setConnectionSource(null);
-      setMultiSelection(new Set());
-  }, [activePageId, activeProjectId]);
-
-  useEffect(() => {
-      if (!isCleanView) {
-          setActiveFilters(new Set());
-          setIsAnnotating(false);
-      }
-  }, [isCleanView]);
 
   useEffect(() => {
     setSaveStatus('saving');
@@ -592,13 +555,17 @@ export default function App() {
     } else {
         if (isShiftKey) {
             setMultiSelection(prev => {
-                const newSet = new Set(prev);
+                // Fix: Added explicit generic type to new Set to avoid unknown type issues during Set iteration
+                const newSet = new Set<string>(prev);
                 if (newSet.has(node.id)) newSet.delete(node.id);
                 else newSet.add(node.id);
                 if (newSet.size === 1) {
                     const id = Array.from(newSet)[0];
-                    const singleNode = findNode(activePage.items, id);
-                    if(singleNode) setSelectedNode(singleNode);
+                    // Fix: Added type guard for 'id' to ensure it's a string before passing to findNode
+                    if (typeof id === 'string') {
+                        const singleNode = findNode(activePage.items, id);
+                        if(singleNode) setSelectedNode(singleNode);
+                    }
                 } else {
                     setSelectedNode(null);
                 }
@@ -871,9 +838,7 @@ export default function App() {
 
   const handleAnalyze = async () => {
     if (activePage.items.length === 0) {
-        const diagNotFound: any = t.dialogs?.diagramNotFound;
-        const notFoundVal: string = typeof diagNotFound === 'string' ? diagNotFound : "Diagram not found.";
-        alert(notFoundVal);
+        alert("Diagram not found.");
         return;
     }
     setShowAnalysis(true);
@@ -883,42 +848,66 @@ export default function App() {
       const result = await analyzeCircuit(activePage.items);
       setAnalysisResult(result);
     } catch (err: any) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(message);
+      console.error(err);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const getFullSVGString = () => {
-      const svgElement = document.getElementById('diagram-svg');
+      const svgElement = document.getElementById('diagram-svg') as unknown as SVGSVGElement;
       if (!svgElement) return null;
-      const clone = svgElement.cloneNode(true) as SVGSVGElement;
-      const buttons = clone.querySelectorAll('circle[stroke-dasharray], rect[stroke-dasharray]');
-      buttons.forEach(b => b.parentElement?.remove());
-      const editButtons = clone.querySelectorAll('.print-layout-edit-btn');
-      editButtons.forEach(b => b.remove());
 
-      const originalGroup = svgElement.querySelector('g');
+      const mainGroup = svgElement.querySelector('g');
+      if (!mainGroup) return null;
+
+      // 1. Get the actual bounding box of the diagram contents (including legend and title block)
+      const bbox = (mainGroup as SVGGElement).getBBox();
+      const padding = 60;
+
+      // 2. Clone the SVG to manipulate it for export
+      const clone = svgElement.cloneNode(true) as SVGSVGElement;
       const cloneGroup = clone.querySelector('g');
-      if (originalGroup && cloneGroup) {
-          const bbox = (originalGroup as SVGGElement).getBBox();
-          const padding = 50;
-          const fullWidth = bbox.width + padding * 2;
-          const fullHeight = bbox.height + padding * 2;
-          clone.setAttribute('width', fullWidth.toString());
-          clone.setAttribute('height', fullHeight.toString());
-          clone.setAttribute('viewBox', `0 0 ${fullWidth} ${fullHeight}`);
-          clone.style.backgroundColor = '#ffffff'; 
-          cloneGroup.setAttribute('transform', `translate(${-bbox.x + padding}, ${-bbox.y + padding})`);
-          clone.setAttribute('direction', isRTL ? 'rtl' : 'ltr');
-      }
+      if (!cloneGroup) return null;
+
+      // 3. Remove temporary UI elements from clone
+      const uiElements = clone.querySelectorAll('.action-buttons, .temp-drawing, .print-layout-edit-btn');
+      uiElements.forEach(el => el.remove());
+
+      // 4. Calculate final dimensions
+      const width = bbox.width + padding * 2;
+      const height = bbox.height + padding * 2;
+      
+      // 5. Set precise viewBox to encompass all drawing content
+      clone.setAttribute('width', width.toString());
+      clone.setAttribute('height', height.toString());
+      clone.setAttribute('viewBox', `${bbox.x - padding} ${bbox.y - padding} ${width} ${height}`);
+      
+      // 6. Force high-quality styles and backgrounds
+      clone.style.backgroundColor = isDark ? '#0f172a' : '#ffffff';
+      
+      // Add font and style definitions directly into the SVG for standalone use
+      const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      style.textContent = `
+          @import url('https://fonts.googleapis.com/icon?family=Material+Icons+Round');
+          text { font-family: 'Inter', -apple-system, system-ui, sans-serif; }
+          .node text { pointer-events: none; }
+          .node-bg { transition: none !important; }
+      `;
+      clone.insertBefore(style, clone.firstChild);
+
       const serializer = new XMLSerializer();
-      let source = serializer.serializeToString(clone);
-      if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
-          source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+      let svgString = serializer.serializeToString(clone);
+      
+      // Fix namespaces for browsers and external viewers
+      if(!svgString.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
+          svgString = svgString.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
       }
-      return source;
+      if(!svgString.match(/^<svg[^>]+xmlns\:xlink="http\:\/\/www\.w3\.org\/1999\/xlink"/)){
+          svgString = svgString.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+      }
+
+      return svgString;
   };
 
   const triggerDownload = (href: string, name: string) => {
@@ -942,16 +931,18 @@ export default function App() {
       triggerDownload(dataStr, `${safeName}_ProjectBackup.json`);
   };
 
-  const handleExport = (format: 'svg' | 'png' | 'json' | 'excel' | 'pdf') => {
+  const handleExport = async (format: 'svg' | 'png' | 'json' | 'excel' | 'pdf') => {
       const safeProjectName = activeProject.name.trim().replace(/[^\w\u0590-\u05FF\u0600-\u06FF\s-]/g, '_');
       const safePageName = activePage.name.trim().replace(/[^\w\u0590-\u05FF\u0600-\u06FF\s-]/g, '_');
       const baseFileName = `${safeProjectName} - ${safePageName}`;
+      
       if (format === 'json') {
           const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(activeProject, null, 2));
           triggerDownload(dataStr, `${baseFileName}.json`);
           setShowExportModal(false);
           return;
       }
+      
       if (format === 'excel') {
           const rows: any[] = [];
           const columns = ['name', 'type', 'componentNum', 'model', 'amps', 'voltage', 'kva', 'parent', 'description', 'hasMeter', 'meterNum', 'place', 'building', 'floor'];
@@ -999,75 +990,90 @@ export default function App() {
           setShowExportModal(false);
           return;
       }
+
       const svgString = getFullSVGString();
       if (!svgString) return;
-      if (format === 'pdf') {
-          const canvas = document.createElement('canvas');
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(svgString, "image/svg+xml");
-          const svg = doc.documentElement;
-          const width = parseFloat(svg.getAttribute('width') || '800');
-          const height = parseFloat(svg.getAttribute('height') || '600');
-          const scale = 3;
-          canvas.width = width * scale;
-          canvas.height = height * scale;
-          const ctx = canvas.getContext('2d');
-          if(!ctx) return;
-          ctx.scale(scale, scale);
-          const img = new Image();
-          const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
-          const url = URL.createObjectURL(svgBlob);
-          img.onload = () => {
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, width, height);
-              ctx.drawImage(img, 0, 0, width, height);
+
+      if (format === 'svg') {
+          const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+          triggerDownload(url, `${baseFileName}.svg`);
+          setShowExportModal(false);
+          return;
+      }
+
+      // PDF and PNG require Canvas conversion
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(svgString, "image/svg+xml");
+      const svg = doc.documentElement;
+      const width = parseFloat(svg.getAttribute('width') || '800');
+      const height = parseFloat(svg.getAttribute('height') || '600');
+      
+      const canvas = document.createElement('canvas');
+      const scale = format === 'pdf' ? 3 : 2; // High resolution
+      canvas.width = width * scale;
+      canvas.height = height * scale;
+      const ctx = canvas.getContext('2d');
+      if(!ctx) return;
+      ctx.scale(scale, scale);
+
+      const img = new Image();
+      const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+      const url = URL.createObjectURL(svgBlob);
+
+      img.onload = () => {
+          ctx.fillStyle = isDark ? '#0f172a' : '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          URL.revokeObjectURL(url);
+
+          if (format === 'png') {
+              const pngUrl = canvas.toDataURL('image/png');
+              triggerDownload(pngUrl, `${baseFileName}.png`);
+          } else if (format === 'pdf') {
               const pngUrl = canvas.toDataURL('image/png');
               const printWindow = window.open('', '_blank');
               if (printWindow) {
                   printWindow.document.write(`
                       <html dir="${isRTL ? 'rtl' : 'ltr'}" lang="${language}">
-                          <head><title>${baseFileName}</title><style>body{margin:0;display:flex;justify-content:center;}img{max-width:100%;}</style></head>
-                          <body><img src="${pngUrl}" onload="setTimeout(() => { window.print(); window.close(); }, 500);" /></body>
+                          <head>
+                              <title>${baseFileName}</title>
+                              <style>
+                                  body { margin: 0; display: flex; flex-direction: column; align-items: center; background: #f0f0f0; font-family: sans-serif; }
+                                  img { max-width: 100%; height: auto; box-shadow: 0 0 20px rgba(0,0,0,0.1); background: white; margin: 20px 0; }
+                                  @media print {
+                                      body { background: white; padding: 0; }
+                                      img { box-shadow: none; margin: 0; width: 100%; }
+                                      @page { margin: 1cm; }
+                                  }
+                              </style>
+                          </head>
+                          <body>
+                              <img src="${pngUrl}" />
+                              <script>
+                                  window.onload = () => {
+                                      setTimeout(() => { 
+                                          window.print(); 
+                                          window.close(); 
+                                      }, 500);
+                                  };
+                              </script>
+                          </body>
                       </html>
                   `);
                   printWindow.document.close();
               }
-              URL.revokeObjectURL(url);
-          };
-          img.src = url;
+          }
           setShowExportModal(false);
-          return;
-      }
-      if (format === 'svg') {
-          const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
-          triggerDownload(url, `${baseFileName}.svg`);
-      } else if (format === 'png') {
-          const canvas = document.createElement('canvas');
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(svgString, "image/svg+xml");
-          const svg = doc.documentElement;
-          const width = parseFloat(svg.getAttribute('width') || '800');
-          const height = parseFloat(svg.getAttribute('height') || '600');
-          const scale = 2;
-          canvas.width = width * scale; 
-          canvas.height = height * scale;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-          ctx.scale(scale, scale);
-          const img = new Image();
-          const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
-          const url = URL.createObjectURL(svgBlob);
-          img.onload = () => {
-              ctx.fillStyle = '#ffffff';
-              ctx.fillRect(0, 0, width, height);
-              ctx.drawImage(img, 0, 0, width, height);
-              URL.revokeObjectURL(url);
-              const pngUrl = canvas.toDataURL('image/png');
-              triggerDownload(pngUrl, `${baseFileName}.png`);
-          };
-          img.src = url;
-      }
-      setShowExportModal(false);
+      };
+      
+      img.onerror = (e) => {
+          console.error("SVG Image Rendering Error:", e);
+          URL.revokeObjectURL(url);
+          alert("Failed to render diagram for export. Try SVG or JSON format.");
+          setShowExportModal(false);
+      };
+
+      img.src = url;
   };
 
   const handleImportProject = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1394,7 +1400,7 @@ export default function App() {
                 title={t.linkComponents}
             >
                 <span className="material-icons-round">link</span>
-                {isConnectMode && <span className="text-xs font-bold px-1">{t.linking}</span>}
+                {isConnectMode && <span className="text-xs font-bold his-1">{t.linking}</span>}
             </button>
 
              <button onClick={() => setOrientation(prev => prev === 'horizontal' ? 'vertical' : 'horizontal')} className="p-2 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700">
@@ -1414,7 +1420,7 @@ export default function App() {
       )}
 
       <main className="flex-1 flex overflow-hidden relative">
-        {/* Sidebar - Hidden in Clean View */}
+        {/* Sidebar */}
         {showProjectSidebar && !isCleanView && (
             <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
                 <div className="p-4 border-b border-slate-800 flex items-center justify-between">
@@ -1498,7 +1504,6 @@ export default function App() {
                             <span className="material-icons-round text-sm">expand_more</span>
                         </button>
                         
-                        {/* Multi-Select Dropdown Content */}
                         <div className="absolute top-full right-0 mt-2 w-56 bg-slate-800 border border-slate-700 rounded-lg shadow-xl hidden group-hover:block p-2 max-h-80 overflow-y-auto">
                             <div className="space-y-1">
                                 <div className="px-2 py-1 text-xs font-bold text-slate-500 uppercase tracking-wider">{t.filters.title}</div>
@@ -1578,7 +1583,7 @@ export default function App() {
                         <span className="material-icons-round">{theme === 'light' ? 'dark_mode' : 'light_mode'}</span>
                     </button>
 
-                     <div className="w-px h-6 bg-slate-700"></div>
+                     <div className="w-px h-6 bg-slate-700 mx-1"></div>
 
                     <button
                         onClick={() => setIsCleanView(false)}
@@ -1641,7 +1646,7 @@ export default function App() {
             </div>
         </div>
 
-        {/* Input/Settings Panel - Hidden in Clean View */}
+        {/* Input/Settings Panel */}
         {!isCleanView && (
             <aside className="w-96 bg-slate-900 border-l border-slate-800 overflow-y-auto flex flex-col z-30 shadow-2xl">
                 {isPrintMode && !selectedNode ? (
